@@ -159,7 +159,7 @@ export default function DeliveryMap({ deliveryPoints, optimizedRoute }: Delivery
           color: "#2563eb",
           weight: 4,
           opacity: 0.8,
-        }).addTo(mapRef.current);
+        }).addTo(mapRef.current!);
 
         polylineRef.current = polyline;
 
