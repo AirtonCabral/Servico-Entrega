@@ -13,7 +13,8 @@ export default function ListaNfesPage() {
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
-    const history = getNfeHistory();
+    if (typeof window === "undefined") return;
+    const history = getNfeHistory(); // pode ler de localStorage aqui
     setItens(history);
     setLoaded(true);
   }, []);

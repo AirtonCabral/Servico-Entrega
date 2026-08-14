@@ -42,10 +42,19 @@ export default function NfeListPage() {
   const [selectedNfes, setSelectedNfes] = useState<Set<string>>(new Set());
   const [loaded, setLoaded] = useState(false);
 
+  // Carrega itens apenas na primeira montagem
   useEffect(() => {
-    setItens(getNfeHistory());
+    if (typeof window === "undefined") return;
+    const history = getNfeHistory();
+    setItens(history);
     setLoaded(true);
   }, []);
+
+  // Sempre que itens mudar, atualiza o localStorage
+  useEffect(() => {
+    if (typeof window === "undefined" || !loaded) return;
+    localStorage.setItem("nfe:data", JSON.stringify(itens));
+  }, [itens, loaded]);
 
   const filtrados = useMemo(() => {
     const q = filtro.trim().toLowerCase();
@@ -140,35 +149,40 @@ export default function NfeListPage() {
       alert("Selecione pelo menos uma NF-e para enviar para entregas.");
       return;
     }
-    
+
     const selectedEntries = itens.filter((e) => selectedNfes.has(e.id));
-    
+
     if (typeof window !== "undefined") {
       try {
-        // Get existing delivery items
         const existingDelivery = JSON.parse(
           localStorage.getItem("delivery:items") || "[]"
         );
-        
-        // Add selected NFEs to delivery
+
         const newDeliveryItems = selectedEntries.map((entry) => ({
           id: `delivery-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
           nfeId: entry.id,
           data: entry.data,
           image: entry.image,
           addedAt: Date.now(),
-          status: "pending"
+          status: "pending",
         }));
-        
+
         const updatedDelivery = [...existingDelivery, ...newDeliveryItems];
         localStorage.setItem("delivery:items", JSON.stringify(updatedDelivery));
-        
-        // Clear selection
+
+        // Remove os selecionados da lista principal
+        const updatedItens = itens.filter((e) => {
+          !selectedNfes.has(e.id)
+          deleteNfeFromHistory(e.id);
+        });
+        setItens(updatedItens);
+        // O useEffect acima já atualiza localStorage "nfe:data"
         setSelectedNfes(new Set());
-        
+        setSelected((prev) => (prev && selectedNfes.has(prev) ? null : prev));
+
         alert(`${selectedNfes.size} NF-e(s) enviada(s) para entregas com sucesso!`);
-        
-        // Navigate to delivery page
+
+        // Navega para a página de entregas
         router.push("/entrega");
       } catch (err) {
         console.error("Erro ao enviar para entregas:", err);
@@ -320,7 +334,10 @@ export default function NfeListPage() {
                     <th className="py-3 pr-2 font-medium">
                       <input
                         type="checkbox"
-                        checked={selectedNfes.size === filtrados.length && filtrados.length > 0}
+                        checked={
+                          selectedNfes.size === filtrados.length &&
+                          filtrados.length > 0
+                        }
                         onChange={toggleSelectAll}
                         className="w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
                       />
@@ -354,9 +371,7 @@ export default function NfeListPage() {
                         key={e.id}
                         onClick={() => setSelected(isSel ? null : e.id)}
                         className={`transition cursor-pointer ${
-                          isSel
-                            ? "bg-primary-50/60"
-                            : "hover:bg-slate-50"
+                          isSel ? "bg-primary-50/60" : "hover:bg-slate-50"
                         } ${isSelected ? "bg-blue-50/40" : ""}`}
                       >
                         <td className="py-3.5 pr-2 align-top">
@@ -424,14 +439,24 @@ export default function NfeListPage() {
                           </span>
                         </td>
                         <td className="py-3.5 pl-2 align-top text-right">
-                          <div className="inline-flex gap-1" onClick={(ev) => ev.stopPropagation()}>
+                          <div
+                            className="inline-flex gap-1"
+                            onClick={(ev) => ev.stopPropagation()}
+                          >
                             <button
                               type="button"
                               onClick={() => onEdit(e)}
                               title="Editar"
                               className="p-2 rounded-md text-gray-500 hover:text-primary-600 hover:bg-primary-50 transition"
                             >
-                              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4">
+                              <svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth={2}
+                                className="w-4 h-4"
+                              >
                                 <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
                                 <path d="m15 5 4 4" />
                               </svg>
@@ -442,7 +467,14 @@ export default function NfeListPage() {
                               title="Excluir"
                               className="p-2 rounded-md text-gray-500 hover:text-red-600 hover:bg-red-50 transition"
                             >
-                              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4">
+                              <svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth={2}
+                                className="w-4 h-4"
+                              >
                                 <path d="M3 6h18" />
                                 <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
                                 <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
@@ -462,7 +494,9 @@ export default function NfeListPage() {
             {filtrados.length === 0 && (
               <div className="text-center py-12 text-sm text-gray-500">
                 Nenhuma NF-e encontrada para o filtro:{" "}
-                <strong className="text-gray-700">&ldquo;{filtro}&rdquo;</strong>
+                <strong className="text-gray-700">
+                  &ldquo;{filtro}&rdquo;
+                </strong>
               </div>
             )}
           </div>
@@ -519,7 +553,9 @@ export default function NfeListPage() {
                         </dd>
                       </div>
                       <div className="col-span-2">
-                        <dt className="text-gray-500 text-xs">Chave de acesso</dt>
+                        <dt className="text-gray-500 text-xs">
+                          Chave de acesso
+                        </dt>
                         <dd className="font-mono text-xs text-gray-900 break-all">
                           {detalhe.data.chaveAcesso || "-"}
                         </dd>
@@ -577,9 +613,15 @@ export default function NfeListPage() {
                           <tr className="text-left text-gray-600">
                             <th className="py-2 px-3 font-medium">Código</th>
                             <th className="py-2 px-3 font-medium">Descrição</th>
-                            <th className="py-2 px-3 font-medium text-right">Qtd</th>
-                            <th className="py-2 px-3 font-medium text-right">Vlr. Unit.</th>
-                            <th className="py-2 px-3 font-medium text-right">Total</th>
+                            <th className="py-2 px-3 font-medium text-right">
+                              Qtd
+                            </th>
+                            <th className="py-2 px-3 font-medium text-right">
+                              Vlr. Unit.
+                            </th>
+                            <th className="py-2 px-3 font-medium text-right">
+                              Total
+                            </th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100 text-gray-800">
