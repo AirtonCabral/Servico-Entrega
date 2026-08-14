@@ -209,7 +209,7 @@ export default function EntregaPage() {
                   className="flex items-start gap-3 p-3 rounded-lg bg-gray-50 hover:bg-gray-100 transition"
                 >
                   <div className="w-8 h-8 rounded-full bg-primary-600 text-white flex items-center justify-center text-sm font-bold flex-shrink-0">
-                    {point.order || index + 1}
+                    {index + 1}
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="font-medium text-gray-900 text-sm truncate">
