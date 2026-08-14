@@ -1,0 +1,1 @@
+export { extrairDadosDANFE } from './extrairDadosDANFE';
