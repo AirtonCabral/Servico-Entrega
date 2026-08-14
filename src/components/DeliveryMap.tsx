@@ -189,7 +189,7 @@ export default function DeliveryMap({ deliveryPoints, optimizedRoute }: Delivery
         // Fit map to show all points
         if (coordinates.length > 0) {
           const bounds = L.latLngBounds(coordinates);
-          mapRef.current.fitBounds(bounds, { padding: [50, 50] });
+          mapRef.current!.fitBounds(bounds, { padding: [50, 50] });
         }
       }
     };
