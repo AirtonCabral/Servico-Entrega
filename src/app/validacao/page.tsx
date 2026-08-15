@@ -200,7 +200,7 @@ export default function ValidacaoPage() {
     e.preventDefault();
     if (!data || !stored) return;
     try {
-      saveNfeToHistory(data, stored.image);
+      saveNfeToHistory("nfe", data, stored.image);
       sessionStorage.setItem(
         "nfe:validated",
         JSON.stringify({

@@ -3,12 +3,13 @@
 import { useState, useRef, useCallback, DragEvent, ChangeEvent } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import type { NotaFiscalData } from "@/lib/types";
+import type { NotaFiscalData, CteData, TipoDocumento } from "@/lib/types";
 
 type Step = "idle" | "uploading" | "processing" | "error";
 
 export default function UploadPage() {
   const router = useRouter();
+  const [tipoDocumento, setTipoDocumento] = useState<TipoDocumento>("nfe");
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [step, setStep] = useState<Step>("idle");
@@ -17,12 +18,16 @@ export default function UploadPage() {
   const [isDragOver, setIsDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const setStoredData = (data: NotaFiscalData, base64: string) => {
+  const setStoredData = (
+    tipo: TipoDocumento,
+    data: NotaFiscalData | CteData,
+    base64: string,
+  ) => {
     if (typeof window === "undefined") return;
     try {
       sessionStorage.setItem(
         "nfe:data",
-        JSON.stringify({ data, image: base64, extractedAt: Date.now() }),
+        JSON.stringify({ tipo, data, image: base64, extractedAt: Date.now() }),
       );
     } catch (e) {
       console.error("Erro ao salvar dados na sessão:", e);
@@ -87,17 +92,15 @@ export default function UploadPage() {
     setProgress(10);
     setErrorMessage("");
 
-    debugger
     try {
       const progressTimer = setInterval(() => {
         setProgress((p) => (p < 85 ? p + Math.random() * 12 : p));
       }, 400);
 
-      
       const res = await fetch("/api/extrair-nfe", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ image: imagePreview }),
+        body: JSON.stringify({ image: imagePreview, tipo: tipoDocumento }),
       });
       const json = await res.json();
       clearInterval(progressTimer);
@@ -105,12 +108,18 @@ export default function UploadPage() {
       if (!res.ok || !json.success) {
         throw new Error(
           json.error ||
-            "Não foi possível extrair os dados da nota fiscal. Tente novamente.",
+            "Não foi possível extrair os dados do documento. Tente novamente.",
         );
       }
 
       setProgress(100);
-      setStoredData(json.data as NotaFiscalData, imagePreview);
+      // json.tipo vem confirmado pelo backend; usamos como fonte de verdade
+      const tipoConfirmado: TipoDocumento = json.tipo === "cte" ? "cte" : "nfe";
+      setStoredData(
+        tipoConfirmado,
+        json.data as NotaFiscalData | CteData,
+        imagePreview,
+      );
 
       setTimeout(() => {
         router.push("/validacao");
@@ -132,16 +141,52 @@ export default function UploadPage() {
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
+  const isCte = tipoDocumento === "cte";
+
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8 sm:py-12">
       <div className="mb-8 sm:mb-10 text-center">
         <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 tracking-tight">
-          Envie a foto da Nota Fiscal
+          Envie a foto do documento fiscal
         </h1>
         <p className="mt-3 text-sm sm:text-base text-gray-600 max-w-2xl mx-auto">
-          Envie uma foto ou scan nítido da sua NF-e (DANFE). Nossa IA extrai
-          automaticamente emissor, destinatário, itens e valores para você
-          revisar.
+          {isCte
+            ? "Envie uma foto ou scan nítido do seu CT-e (DACTE). Nossa IA extrai automaticamente remetente, destinatário, componentes do frete e impostos para você revisar."
+            : "Envie uma foto ou scan nítido da sua NF-e (DANFE). Nossa IA extrai automaticamente emissor, destinatário, itens e valores para você revisar."}
+        </p>
+      </div>
+
+      {/* Seletor de tipo de documento */}
+      <div className="max-w-md mx-auto mb-8 sm:mb-10">
+        <div className="inline-flex w-full rounded-xl border border-gray-200 bg-gray-50 p-1 gap-1">
+          <button
+            type="button"
+            onClick={() => setTipoDocumento("nfe")}
+            disabled={step === "processing"}
+            className={`flex-1 inline-flex items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-medium transition ${
+              !isCte
+                ? "bg-white text-primary-700 shadow-sm border border-gray-200"
+                : "text-gray-500 hover:text-gray-700"
+            }`}
+          >
+            📄 NF-e (produtos)
+          </button>
+          <button
+            type="button"
+            onClick={() => setTipoDocumento("cte")}
+            disabled={step === "processing"}
+            className={`flex-1 inline-flex items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-medium transition ${
+              isCte
+                ? "bg-white text-primary-700 shadow-sm border border-gray-200"
+                : "text-gray-500 hover:text-gray-700"
+            }`}
+          >
+            🚚 CT-e (frete)
+          </button>
+        </div>
+        <p className="mt-2 text-center text-xs text-gray-500">
+          Escolha o tipo de documento antes de enviar a imagem — isso ajuda a
+          IA a extrair os campos corretos.
         </p>
       </div>
 
@@ -202,12 +247,20 @@ export default function UploadPage() {
               Dicas para melhor extração
             </h3>
             <ul className="space-y-2 text-sm text-gray-600">
-              {[
-                "Garanta boa iluminação e foco em todo o documento",
-                "Evite sombras, reflexos ou cortes nas bordas",
-                "Chave de acesso e valores devem estar legíveis",
-                "DANFE impresso em tamanho A4 em fundo plano",
-              ].map((d) => (
+              {(isCte
+                ? [
+                    "Garanta boa iluminação e foco em todo o documento",
+                    "Evite sombras, reflexos ou cortes nas bordas",
+                    "Chave de acesso e valores do frete devem estar legíveis",
+                    "DACTE impresso em tamanho A4 em fundo plano",
+                  ]
+                : [
+                    "Garanta boa iluminação e foco em todo o documento",
+                    "Evite sombras, reflexos ou cortes nas bordas",
+                    "Chave de acesso e valores devem estar legíveis",
+                    "DANFE impresso em tamanho A4 em fundo plano",
+                  ]
+              ).map((d) => (
                 <li key={d} className="flex gap-2">
                   <span className="mt-0.5 text-primary-600">•</span>
                   <span>{d}</span>
@@ -240,7 +293,7 @@ export default function UploadPage() {
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={imagePreview}
-                  alt="Pré-visualização da NF-e"
+                  alt={`Pré-visualização do ${isCte ? "CT-e" : "NF-e"}`}
                   className="w-full h-full object-contain bg-white"
                 />
               ) : (
@@ -371,7 +424,10 @@ export default function UploadPage() {
           <div className="card bg-gradient-to-br from-slate-900 to-slate-800 border-slate-800 text-white">
             <h3 className="font-semibold mb-2">Como funciona?</h3>
             <ol className="text-sm text-slate-300 space-y-2 list-decimal list-inside">
-              <li>Envie a foto da NF-e (DANFE)</li>
+              <li>
+                Escolha o tipo de documento ({isCte ? "CT-e / DACTE" : "NF-e / DANFE"})
+              </li>
+              <li>Envie a foto do documento</li>
               <li>IA lê e organiza os dados automaticamente</li>
               <li>Revise, ajuste e confirme as informações</li>
             </ol>

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { NfeHistoryEntry } from "@/lib/storage";
+import type { NotaFiscalData, CteData } from "@/lib/types";
 import {
   clearNfeHistory,
   deleteNfeFromHistory,
@@ -34,6 +35,66 @@ function formatMoney(v: string): string {
   });
 }
 
+function getTipo(entry: NfeHistoryEntry): "nfe" | "cte" {
+  return entry.tipo ?? "nfe";
+}
+
+function getValorTotal(entry: NfeHistoryEntry): string {
+  const tipo = getTipo(entry);
+  return tipo === "nfe" 
+    ? (entry.data as NotaFiscalData).valorTotal
+    : (entry.data as CteData).valorTotalServico;
+}
+
+function getItensCount(entry: NfeHistoryEntry): number {
+  const tipo = getTipo(entry);
+  return tipo === "nfe" 
+    ? (entry.data as NotaFiscalData).produtos?.length || 0
+    : 0; // CT-e doesn't have produtos
+}
+
+function getEmissao(entry: NfeHistoryEntry): string {
+  const tipo = getTipo(entry);
+  return tipo === "nfe" 
+    ? (entry.data as NotaFiscalData).dataEmissao
+    : (entry.data as CteData).dataHoraEmissao;
+}
+
+function getNatureza(entry: NfeHistoryEntry): string {
+  const tipo = getTipo(entry);
+  return tipo === "nfe" 
+    ? (entry.data as NotaFiscalData).naturezaOperacao
+    : (entry.data as CteData).tipoCte;
+}
+
+function getEmitenteNome(entry: NfeHistoryEntry): string {
+  const tipo = getTipo(entry);
+  return tipo === "nfe" 
+    ? (entry.data as NotaFiscalData).emitente.nome
+    : (entry.data as CteData).remetente.nome;
+}
+
+function getEmitenteDoc(entry: NfeHistoryEntry): string {
+  const tipo = getTipo(entry);
+  return tipo === "nfe" 
+    ? (entry.data as NotaFiscalData).emitente.cnpj
+    : (entry.data as CteData).remetente.cnpjCpf;
+}
+
+function getDestinatarioNome(entry: NfeHistoryEntry): string {
+  const tipo = getTipo(entry);
+  return tipo === "nfe" 
+    ? (entry.data as NotaFiscalData).destinatario.nome
+    : (entry.data as CteData).destinatario.nome;
+}
+
+function getDestinatarioDoc(entry: NfeHistoryEntry): string {
+  const tipo = getTipo(entry);
+  return tipo === "nfe" 
+    ? (entry.data as NotaFiscalData).destinatario.cpfCnpj
+    : (entry.data as CteData).destinatario.cnpjCpf;
+}
+
 export default function NfeListPage() {
   const router = useRouter();
   const [itens, setItens] = useState<NfeHistoryEntry[]>([]);
@@ -61,17 +122,28 @@ export default function NfeListPage() {
     if (!q) return itens;
     return itens.filter((e) => {
       const d = e.data;
+      const tipo = e.tipo ?? "nfe";
+      
       const haystack = [
         d.numero,
         d.serie,
-        d.emitente.nome,
-        d.emitente.cnpj,
-        d.destinatario.nome,
-        d.destinatario.cpfCnpj,
         d.chaveAcesso,
-        d.naturezaOperacao,
-        d.dataEmissao,
-        ...(d.produtos?.map((p) => `${p.codigo} ${p.descricao}`) || []),
+        ...(tipo === "nfe" ? [
+          (d as NotaFiscalData).emitente.nome,
+          (d as NotaFiscalData).emitente.cnpj,
+          (d as NotaFiscalData).destinatario.nome,
+          (d as NotaFiscalData).destinatario.cpfCnpj,
+          (d as NotaFiscalData).naturezaOperacao,
+          (d as NotaFiscalData).dataEmissao,
+          ...((d as NotaFiscalData).produtos?.map((p) => `${p.codigo} ${p.descricao}`) || []),
+        ] : [
+          (d as CteData).remetente.nome,
+          (d as CteData).remetente.cnpjCpf,
+          (d as CteData).destinatario.nome,
+          (d as CteData).destinatario.cnpjCpf,
+          (d as CteData).tipoCte,
+          (d as CteData).dataHoraEmissao,
+        ]),
       ]
         .join(" ")
         .toLowerCase();
@@ -81,7 +153,13 @@ export default function NfeListPage() {
 
   const totalGeral = useMemo(
     () =>
-      itens.reduce((acc, e) => acc + toNumber(e.data.valorTotal), 0),
+      itens.reduce((acc, e) => {
+        const tipo = e.tipo ?? "nfe";
+        const valor = tipo === "nfe" 
+          ? (e.data as NotaFiscalData).valorTotal
+          : (e.data as CteData).valorTotalServico;
+        return acc + toNumber(valor);
+      }, 0),
     [itens],
   );
 
@@ -261,10 +339,7 @@ export default function NfeListPage() {
                 Itens cadastrados
               </p>
               <p className="mt-2 text-3xl font-bold text-gray-900 tabular-nums">
-                {itens.reduce(
-                  (acc, e) => acc + (e.data.produtos?.length || 0),
-                  0,
-                )}
+                {itens.reduce((acc, e) => acc + getItensCount(e), 0)}
               </p>
             </div>
           </div>
@@ -392,45 +467,45 @@ export default function NfeListPage() {
                           <div className="text-xs text-gray-500">
                             Série {e.data.serie || "-"} ·{" "}
                             <span className="text-primary-700 font-medium">
-                              {e.data.naturezaOperacao || "NF-e"}
+                              {getNatureza(e) || "NF-e"}
                             </span>
                           </div>
                         </td>
                         <td className="py-3.5 pr-4 align-top hidden sm:table-cell">
                           <div className="font-medium text-gray-800 tabular-nums">
-                            {e.data.dataEmissao || "-"}
+                            {getEmissao(e) || "-"}
                           </div>
-                          {e.data.dataSaidaEntrada &&
-                            e.data.dataSaidaEntrada !== e.data.dataEmissao && (
+                          {getTipo(e) === "nfe" && (e.data as NotaFiscalData).dataSaidaEntrada &&
+                            (e.data as NotaFiscalData).dataSaidaEntrada !== (e.data as NotaFiscalData).dataEmissao && (
                               <div className="text-xs text-gray-500">
-                                Saída {e.data.dataSaidaEntrada}
+                                Saída {(e.data as NotaFiscalData).dataSaidaEntrada}
                               </div>
                             )}
                         </td>
                         <td className="py-3.5 pr-4 align-top">
                           <div className="font-medium text-gray-900 line-clamp-1">
-                            {e.data.emitente.nome || "-"}
+                            {getEmitenteNome(e) || "-"}
                           </div>
                           <div className="text-xs text-gray-500 tabular-nums">
-                            {e.data.emitente.cnpj || "-"}
+                            {getEmitenteDoc(e) || "-"}
                           </div>
                         </td>
                         <td className="py-3.5 pr-4 align-top hidden lg:table-cell">
                           <div className="font-medium text-gray-800 line-clamp-1">
-                            {e.data.destinatario.nome || "-"}
+                            {getDestinatarioNome(e) || "-"}
                           </div>
                           <div className="text-xs text-gray-500 tabular-nums">
-                            {e.data.destinatario.cpfCnpj || "-"}
+                            {getDestinatarioDoc(e) || "-"}
                           </div>
                         </td>
                         <td className="py-3.5 pr-4 align-top hidden md:table-cell">
                           <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-700 tabular-nums">
-                            {e.data.produtos?.length || 0} item(ns)
+                            {getItensCount(e)} item(ns)
                           </span>
                         </td>
                         <td className="py-3.5 pr-4 align-top text-right">
                           <div className="font-bold text-gray-900 tabular-nums">
-                            {formatMoney(e.data.valorTotal)}
+                            {formatMoney(getValorTotal(e))}
                           </div>
                         </td>
                         <td className="py-3.5 pr-4 align-top hidden xl:table-cell">
@@ -506,7 +581,7 @@ export default function NfeListPage() {
               <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-5">
                 <div>
                   <h3 className="font-bold text-gray-900 text-lg">
-                    Detalhes da NF-e {detalhe.data.numero || ""}{" "}
+                    Detalhes do {getTipo(detalhe) === "nfe" ? "NF-e" : "CT-e"} {detalhe.data.numero || ""}{" "}
                     <span className="text-gray-400 font-normal">
                       / Série {detalhe.data.serie || "-"}
                     </span>
@@ -543,13 +618,13 @@ export default function NfeListPage() {
                       <div>
                         <dt className="text-gray-500 text-xs">Natureza</dt>
                         <dd className="font-medium text-gray-900">
-                          {detalhe.data.naturezaOperacao || "-"}
+                          {getNatureza(detalhe) || "-"}
                         </dd>
                       </div>
                       <div>
                         <dt className="text-gray-500 text-xs">Emissão</dt>
                         <dd className="font-medium text-gray-900 tabular-nums">
-                          {detalhe.data.dataEmissao || "-"}
+                          {getEmissao(detalhe) || "-"}
                         </dd>
                       </div>
                       <div className="col-span-2">
@@ -563,89 +638,164 @@ export default function NfeListPage() {
                     </dl>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="rounded-xl border border-gray-200 p-4 bg-gray-50/50">
-                      <p className="text-xs font-semibold text-primary-700 uppercase tracking-wide mb-2">
-                        🏢 Emitente
-                      </p>
-                      <p className="font-semibold text-gray-900 text-sm">
-                        {detalhe.data.emitente.nome || "-"}
-                      </p>
-                      <p className="text-xs text-gray-600 tabular-nums">
-                        CNPJ {detalhe.data.emitente.cnpj || "-"}
-                      </p>
-                      <p className="text-xs text-gray-500 mt-2">
-                        {detalhe.data.emitente.endereco}
-                        {detalhe.data.emitente.municipio
-                          ? ` · ${detalhe.data.emitente.municipio}/${detalhe.data.emitente.uf}`
-                          : ""}
-                      </p>
-                    </div>
-                    <div className="rounded-xl border border-gray-200 p-4 bg-gray-50/50">
-                      <p className="text-xs font-semibold text-primary-700 uppercase tracking-wide mb-2">
-                        👤 Destinatário
-                      </p>
-                      <p className="font-semibold text-gray-900 text-sm">
-                        {detalhe.data.destinatario.nome || "-"}
-                      </p>
-                      <p className="text-xs text-gray-600 tabular-nums">
-                        {detalhe.data.destinatario.cpfCnpj?.length > 14
-                          ? "CNPJ "
-                          : "CPF "}
-                        {detalhe.data.destinatario.cpfCnpj || "-"}
-                      </p>
-                      <p className="text-xs text-gray-500 mt-2">
-                        {detalhe.data.destinatario.endereco}
-                        {detalhe.data.destinatario.municipio
-                          ? ` · ${detalhe.data.destinatario.municipio}/${detalhe.data.destinatario.uf}`
-                          : ""}
-                      </p>
-                    </div>
-                  </div>
+                  {getTipo(detalhe) === "nfe" ? (
+                    <>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="rounded-xl border border-gray-200 p-4 bg-gray-50/50">
+                          <p className="text-xs font-semibold text-primary-700 uppercase tracking-wide mb-2">
+                            🏢 Emitente
+                          </p>
+                          <p className="font-semibold text-gray-900 text-sm">
+                            {(detalhe.data as NotaFiscalData).emitente.nome || "-"}
+                          </p>
+                          <p className="text-xs text-gray-600 tabular-nums">
+                            CNPJ {(detalhe.data as NotaFiscalData).emitente.cnpj || "-"}
+                          </p>
+                          <p className="text-xs text-gray-500 mt-2">
+                            {(detalhe.data as NotaFiscalData).emitente.endereco}
+                            {(detalhe.data as NotaFiscalData).emitente.municipio
+                              ? ` · ${(detalhe.data as NotaFiscalData).emitente.municipio}/${(detalhe.data as NotaFiscalData).emitente.uf}`
+                              : ""}
+                          </p>
+                        </div>
+                        <div className="rounded-xl border border-gray-200 p-4 bg-gray-50/50">
+                          <p className="text-xs font-semibold text-primary-700 uppercase tracking-wide mb-2">
+                            👤 Destinatário
+                          </p>
+                          <p className="font-semibold text-gray-900 text-sm">
+                            {(detalhe.data as NotaFiscalData).destinatario.nome || "-"}
+                          </p>
+                          <p className="text-xs text-gray-600 tabular-nums">
+                            {(detalhe.data as NotaFiscalData).destinatario.cpfCnpj?.length > 14
+                              ? "CNPJ "
+                              : "CPF "}
+                            {(detalhe.data as NotaFiscalData).destinatario.cpfCnpj || "-"}
+                          </p>
+                          <p className="text-xs text-gray-500 mt-2">
+                            {(detalhe.data as NotaFiscalData).destinatario.endereco}
+                            {(detalhe.data as NotaFiscalData).destinatario.municipio
+                              ? ` · ${(detalhe.data as NotaFiscalData).destinatario.municipio}/${(detalhe.data as NotaFiscalData).destinatario.uf}`
+                              : ""}
+                          </p>
+                        </div>
+                      </div>
 
-                  <div>
-                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
-                      Itens ({detalhe.data.produtos?.length || 0})
-                    </p>
-                    <div className="overflow-x-auto rounded-xl border border-gray-200">
-                      <table className="min-w-full text-xs">
-                        <thead className="bg-gray-50">
-                          <tr className="text-left text-gray-600">
-                            <th className="py-2 px-3 font-medium">Código</th>
-                            <th className="py-2 px-3 font-medium">Descrição</th>
-                            <th className="py-2 px-3 font-medium text-right">
-                              Qtd
-                            </th>
-                            <th className="py-2 px-3 font-medium text-right">
-                              Vlr. Unit.
-                            </th>
-                            <th className="py-2 px-3 font-medium text-right">
-                              Total
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-100 text-gray-800">
-                          {(detalhe.data.produtos || []).map((p, i) => (
-                            <tr key={i}>
-                              <td className="py-2 px-3 tabular-nums font-mono">
-                                {p.codigo || "-"}
-                              </td>
-                              <td className="py-2 px-3">{p.descricao || "-"}</td>
-                              <td className="py-2 px-3 text-right tabular-nums">
-                                {p.quantidade || "-"} {p.unidade}
-                              </td>
-                              <td className="py-2 px-3 text-right tabular-nums">
-                                {formatMoney(p.valorUnitario)}
-                              </td>
-                              <td className="py-2 px-3 text-right font-semibold tabular-nums">
-                                {formatMoney(p.valorTotal)}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
+                      <div>
+                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                          Itens ({(detalhe.data as NotaFiscalData).produtos?.length || 0})
+                        </p>
+                        <div className="overflow-x-auto rounded-xl border border-gray-200">
+                          <table className="min-w-full text-xs">
+                            <thead className="bg-gray-50">
+                              <tr className="text-left text-gray-600">
+                                <th className="py-2 px-3 font-medium">Código</th>
+                                <th className="py-2 px-3 font-medium">Descrição</th>
+                                <th className="py-2 px-3 font-medium text-right">
+                                  Qtd
+                                </th>
+                                <th className="py-2 px-3 font-medium text-right">
+                                  Vlr. Unit.
+                                </th>
+                                <th className="py-2 px-3 font-medium text-right">
+                                  Total
+                                </th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100 text-gray-800">
+                              {((detalhe.data as NotaFiscalData).produtos || []).map((p, i) => (
+                                <tr key={i}>
+                                  <td className="py-2 px-3 tabular-nums font-mono">
+                                    {p.codigo || "-"}
+                                  </td>
+                                  <td className="py-2 px-3">{p.descricao || "-"}</td>
+                                  <td className="py-2 px-3 text-right tabular-nums">
+                                    {p.quantidade || "-"} {p.unidade}
+                                  </td>
+                                  <td className="py-2 px-3 text-right tabular-nums">
+                                    {formatMoney(p.valorUnitario)}
+                                  </td>
+                                  <td className="py-2 px-3 text-right font-semibold tabular-nums">
+                                    {formatMoney(p.valorTotal)}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="rounded-xl border border-gray-200 p-4 bg-gray-50/50">
+                          <p className="text-xs font-semibold text-primary-700 uppercase tracking-wide mb-2">
+                            🏢 Remetente
+                          </p>
+                          <p className="font-semibold text-gray-900 text-sm">
+                            {(detalhe.data as CteData).remetente.nome || "-"}
+                          </p>
+                          <p className="text-xs text-gray-600 tabular-nums">
+                            CNPJ/CPF {(detalhe.data as CteData).remetente.cnpjCpf || "-"}
+                          </p>
+                          <p className="text-xs text-gray-500 mt-2">
+                            {(detalhe.data as CteData).remetente.endereco}
+                            {(detalhe.data as CteData).remetente.municipio
+                              ? ` · ${(detalhe.data as CteData).remetente.municipio}/${(detalhe.data as CteData).remetente.uf}`
+                              : ""}
+                          </p>
+                        </div>
+                        <div className="rounded-xl border border-gray-200 p-4 bg-gray-50/50">
+                          <p className="text-xs font-semibold text-primary-700 uppercase tracking-wide mb-2">
+                            👤 Destinatário
+                          </p>
+                          <p className="font-semibold text-gray-900 text-sm">
+                            {(detalhe.data as CteData).destinatario.nome || "-"}
+                          </p>
+                          <p className="text-xs text-gray-600 tabular-nums">
+                            CNPJ/CPF {(detalhe.data as CteData).destinatario.cnpjCpf || "-"}
+                          </p>
+                          <p className="text-xs text-gray-500 mt-2">
+                            {(detalhe.data as CteData).destinatario.endereco}
+                            {(detalhe.data as CteData).destinatario.municipio
+                              ? ` · ${(detalhe.data as CteData).destinatario.municipio}/${(detalhe.data as CteData).destinatario.uf}`
+                              : ""}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="rounded-xl border border-gray-200 p-4 bg-gray-50/50">
+                        <p className="text-xs font-semibold text-primary-700 uppercase tracking-wide mb-2">
+                          📦 Carga
+                        </p>
+                        <dl className="grid grid-cols-2 gap-3 text-sm">
+                          <div>
+                            <dt className="text-gray-500 text-xs">Produto predominante</dt>
+                            <dd className="font-medium text-gray-900">
+                              {(detalhe.data as CteData).produtoPredominante || "-"}
+                            </dd>
+                          </div>
+                          <div>
+                            <dt className="text-gray-500 text-xs">Peso bruto</dt>
+                            <dd className="font-medium text-gray-900 tabular-nums">
+                              {(detalhe.data as CteData).pesoBruto || "-"}
+                            </dd>
+                          </div>
+                          <div>
+                            <dt className="text-gray-500 text-xs">Volumes</dt>
+                            <dd className="font-medium text-gray-900 tabular-nums">
+                              {(detalhe.data as CteData).volumes || "-"}
+                            </dd>
+                          </div>
+                          <div>
+                            <dt className="text-gray-500 text-xs">Valor total da carga</dt>
+                            <dd className="font-medium text-gray-900 tabular-nums">
+                              {formatMoney((detalhe.data as CteData).valorTotalCarga)}
+                            </dd>
+                          </div>
+                        </dl>
+                      </div>
+                    </>
+                  )}
                 </div>
 
                 <div className="space-y-4">
@@ -671,31 +821,33 @@ export default function NfeListPage() {
                   )}
                   <div className="rounded-xl bg-gradient-to-br from-primary-600 to-primary-800 text-white p-5">
                     <p className="text-xs uppercase tracking-wide text-primary-100">
-                      Valor total da NF-e
+                      Valor total {getTipo(detalhe) === "nfe" ? "da NF-e" : "do serviço"}
                     </p>
                     <p className="mt-2 text-3xl font-bold tabular-nums">
-                      {formatMoney(detalhe.data.valorTotal)}
+                      {formatMoney(getValorTotal(detalhe))}
                     </p>
-                    <dl className="mt-4 space-y-1.5 text-sm">
-                      {[
-                        ["Produtos", detalhe.data.valoresTotais.valorProdutos],
-                        ["ICMS", detalhe.data.valoresTotais.valorICMS],
-                        ["Frete", detalhe.data.valoresTotais.valorFrete],
-                        ["Desconto", detalhe.data.valoresTotais.valorDesconto],
-                      ].map(([k, v]) =>
-                        v ? (
-                          <div
-                            key={k}
-                            className="flex justify-between text-primary-100"
-                          >
-                            <dt>{k}</dt>
-                            <dd className="tabular-nums font-medium">
-                              {formatMoney(v)}
-                            </dd>
-                          </div>
-                        ) : null,
-                      )}
-                    </dl>
+                    {getTipo(detalhe) === "nfe" && (
+                      <dl className="mt-4 space-y-1.5 text-sm">
+                        {[
+                          ["Produtos", (detalhe.data as NotaFiscalData).valoresTotais.valorProdutos],
+                          ["ICMS", (detalhe.data as NotaFiscalData).valoresTotais.valorICMS],
+                          ["Frete", (detalhe.data as NotaFiscalData).valoresTotais.valorFrete],
+                          ["Desconto", (detalhe.data as NotaFiscalData).valoresTotais.valorDesconto],
+                        ].map(([k, v]) =>
+                          v ? (
+                            <div
+                              key={k}
+                              className="flex justify-between text-primary-100"
+                            >
+                              <dt>{k}</dt>
+                              <dd className="tabular-nums font-medium">
+                                {formatMoney(v)}
+                              </dd>
+                            </div>
+                          ) : null,
+                        )}
+                      </dl>
+                    )}
                   </div>
                 </div>
               </div>

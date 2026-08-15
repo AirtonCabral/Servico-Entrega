@@ -183,7 +183,9 @@ export default function ListaNfesPage() {
                       {item.data.numero || "-"}
                     </td>
                     <td className="py-3 pr-4 text-gray-600">
-                      {item.data.dataEmissao || "-"}
+                      {item.tipo === "cte"
+                        ? (item.data as any).dataHoraEmissao || "-"
+                        : (item.data as any).dataEmissao || "-"}
                     </td>
                     <td className="py-3 pr-4 text-gray-900">
                       {item.data.destinatario.nome || "-"}
