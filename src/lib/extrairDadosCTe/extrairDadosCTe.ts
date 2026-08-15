@@ -198,6 +198,7 @@ export function extrairDadosCTe(texto: string): CteData {
   const enderecoEntrega = pick(/ENDERE[ÇC]O ENTREGA:?\s*([^*\n]+)/i);
 
   const dados: CteData = {
+    nome: "",
     modelo,
     serie,
     numero,

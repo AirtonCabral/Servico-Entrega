@@ -36,7 +36,11 @@ function formatMoney(v: string): string {
 }
 
 function getTipo(entry: NfeHistoryEntry): "nfe" | "cte" {
-  return entry.tipo ?? "nfe";
+  if (entry.tipo === "cte" || entry.tipo === "nfe") return entry.tipo;
+  // Registro legado (sem "tipo") ou corrompido: detecta pelo formato do objeto
+  const d = entry.data as unknown as Record<string, unknown>;
+  const pareceCte = !!d && typeof d === "object" && "remetente" in d && "componentesValor" in d;
+  return pareceCte ? "cte" : "nfe";
 }
 
 function getValorTotal(entry: NfeHistoryEntry): string {
@@ -70,8 +74,8 @@ function getNatureza(entry: NfeHistoryEntry): string {
 function getEmitenteNome(entry: NfeHistoryEntry): string {
   const tipo = getTipo(entry);
   return tipo === "nfe" 
-    ? (entry.data as NotaFiscalData).emitente.nome
-    : (entry.data as CteData).remetente.nome;
+    ? (entry.data as NotaFiscalData).emitente.nome || ""
+    : (entry.data as CteData).remetente.nome || "";
 }
 
 function getEmitenteDoc(entry: NfeHistoryEntry): string {

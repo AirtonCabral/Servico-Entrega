@@ -94,6 +94,7 @@ export interface ComponentesValorCTe {
 }
 
 export interface CteData {
+  nome: string;
   modelo: string;
   serie: string;
   numero: string;
