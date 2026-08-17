@@ -833,10 +833,10 @@ export default function NfeListPage() {
                     {getTipo(detalhe) === "nfe" && (
                       <dl className="mt-4 space-y-1.5 text-sm">
                         {[
-                          ["Produtos", (detalhe.data as NotaFiscalData).valoresTotais.valorProdutos],
-                          ["ICMS", (detalhe.data as NotaFiscalData).valoresTotais.valorICMS],
-                          ["Frete", (detalhe.data as NotaFiscalData).valoresTotais.valorFrete],
-                          ["Desconto", (detalhe.data as NotaFiscalData).valoresTotais.valorDesconto],
+                          ["Produtos", (detalhe.data as NotaFiscalData).valoresTotais?.valorProdutos],
+                          ["ICMS", (detalhe.data as NotaFiscalData).valoresTotais?.valorICMS],
+                          ["Frete", (detalhe.data as NotaFiscalData).valoresTotais?.valorFrete],
+                          ["Desconto", (detalhe.data as NotaFiscalData).valoresTotais?.valorDesconto],
                         ].map(([k, v]) =>
                           v ? (
                             <div

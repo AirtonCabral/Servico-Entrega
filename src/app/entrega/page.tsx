@@ -75,7 +75,7 @@ export default function EntregaPage() {
         id: item.id,
         destinatario: item.data.destinatario.nome,
         endereco: item.data.destinatario.endereco,
-        bairro: item.data.destinatario.bairro || "Sem bairro",
+        bairro: "bairro" in item.data.destinatario ? item.data.destinatario.bairro || "Sem bairro" : "Sem bairro",
         municipio: item.data.destinatario.municipio,
         uf: item.data.destinatario.uf,
         cep: item.data.destinatario.cep,

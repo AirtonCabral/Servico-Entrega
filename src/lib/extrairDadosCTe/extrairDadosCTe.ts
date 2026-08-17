@@ -17,7 +17,7 @@
  * Uso:
  *   const dados = extrairDadosCTe(textoOCR);
  */
-import type { CteData, PessoaCTe } from "./types";
+import type { CteData, PessoaCTe } from "../types";
 
 const RE_CNPJ = /\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}/;
 // Variante tolerante: o OCR às vezes troca "." por "," dentro do CNPJ

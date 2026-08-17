@@ -5,11 +5,12 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type {
   NotaFiscalData,
-  ProdutoItem,
+  ProdutoNF,
   CteData,
   PessoaCTe,
-  ComponentesValorCTe,
+  ComponentesValor,
   TipoDocumento,
+  ValoresTotaisNF,
 } from "@/lib/types";
 import { saveNfeToHistory } from "@/lib/storage";
 
@@ -45,7 +46,7 @@ const SECTIONS_CTE: { key: SectionKeyCte; label: string; icon: string }[] = [
   { key: "impostos", label: "Impostos", icon: "💰" },
 ];
 
-const emptyProduto = (): ProdutoItem => ({
+const emptyProduto = (): ProdutoNF => ({
   codigo: "",
   descricao: "",
   ncm: "",
@@ -209,19 +210,21 @@ export default function ValidacaoPage() {
     patch("emitente", { ...nfeData!.emitente, [key]: v });
   const patchDest = (key: keyof NotaFiscalData["destinatario"], v: string) =>
     patch("destinatario", { ...nfeData!.destinatario, [key]: v });
-  const patchTotais = (key: keyof NotaFiscalData["valoresTotais"], v: string) =>
-    patch("valoresTotais", { ...nfeData!.valoresTotais, [key]: v });
+  const patchTotais = (key: keyof ValoresTotaisNF, v: string) =>
+    patch("valoresTotais", { ...(nfeData!.valoresTotais || {} as ValoresTotaisNF), [key]: v });
 
-  const updateProduto = (idx: number, p: ProdutoItem) => {
-    const next = [...nfeData!.produtos];
+  const updateProduto = (idx: number, p: ProdutoNF) => {
+    const produtos = nfeData!.produtos || [];
+    const next = [...produtos];
     next[idx] = p;
     patch("produtos", next);
   };
   const removeProduto = (idx: number) => {
-    if (nfeData!.produtos.length <= 1) return;
-    patch("produtos", nfeData!.produtos.filter((_, i) => i !== idx));
+    const produtos = nfeData!.produtos || [];
+    if (produtos.length <= 1) return;
+    patch("produtos", produtos.filter((_, i) => i !== idx));
   };
-  const addProduto = () => patch("produtos", [...nfeData!.produtos, emptyProduto()]);
+  const addProduto = () => patch("produtos", [...(nfeData!.produtos || []), emptyProduto()]);
 
   // ---------- patch helpers: CT-e ----------
   const patchCte = <K extends keyof CteData>(key: K, value: CteData[K]) =>
@@ -233,7 +236,7 @@ export default function ValidacaoPage() {
     v: string,
   ) => patchCte(campo, { ...cteData![campo], [key]: v });
 
-  const patchComponentes = (key: keyof ComponentesValorCTe, v: string) =>
+  const patchComponentes = (key: keyof ComponentesValor, v: string) =>
     patchCte("componentesValor", { ...cteData!.componentesValor, [key]: v });
 
   const onSubmit = (e: React.FormEvent) => {
@@ -380,7 +383,7 @@ export default function ValidacaoPage() {
           {isNfe && active === "produtos" && (
             <div className="card">
               <div className="flex items-start justify-between gap-4 mb-4">
-                <SectionHeader icon="📦" title="Produtos / Serviços" subtitle={`${nfeData!.produtos.length} item(ns) listado(s) na NF-e`} />
+                <SectionHeader icon="📦" title="Produtos / Serviços" subtitle={`${(nfeData!.produtos || []).length} item(ns) listado(s) na NF-e`} />
                 <button type="button" onClick={addProduto} className="btn-secondary text-sm !py-2 !px-3">
                   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4">
                     <path d="M12 5v14M5 12h14" />
@@ -390,11 +393,11 @@ export default function ValidacaoPage() {
               </div>
 
               <div className="space-y-5">
-                {nfeData!.produtos.map((p, i) => (
+                {(nfeData!.produtos || []).map((p, i) => (
                   <div key={i} className="rounded-xl border border-gray-200 bg-gray-50/40 p-4 sm:p-5 relative">
                     <div className="flex items-center justify-between mb-3">
                       <span className="text-xs font-semibold text-gray-500 bg-white px-2.5 py-1 rounded-full border border-gray-200">Item {i + 1}</span>
-                      <button type="button" onClick={() => removeProduto(i)} disabled={nfeData!.produtos.length <= 1} className="text-xs font-medium text-red-600 hover:text-red-700 disabled:opacity-40 disabled:cursor-not-allowed">
+                      <button type="button" onClick={() => removeProduto(i)} disabled={(nfeData!.produtos || []).length <= 1} className="text-xs font-medium text-red-600 hover:text-red-700 disabled:opacity-40 disabled:cursor-not-allowed">
                         Remover
                       </button>
                     </div>
@@ -437,15 +440,15 @@ export default function ValidacaoPage() {
             <div className="card">
               <SectionHeader icon="💰" title="Valores Totais e Tributos" subtitle="Confira os valores finais da operação" />
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                <Field id="t-bc" label="Base Cálculo ICMS" inputMode="decimal" value={nfeData!.valoresTotais.baseCalculoICMS || ""} onChange={(v) => patchTotais("baseCalculoICMS", v)} />
-                <Field id="t-icms" label="Valor ICMS" inputMode="decimal" value={nfeData!.valoresTotais.valorICMS || ""} onChange={(v) => patchTotais("valorICMS", v)} />
-                <Field id="t-prod" label="Vlr. Produtos" inputMode="decimal" value={nfeData!.valoresTotais.valorProdutos || ""} onChange={(v) => patchTotais("valorProdutos", v)} />
-                <Field id="t-frete" label="Frete" inputMode="decimal" value={nfeData!.valoresTotais.valorFrete || ""} onChange={(v) => patchTotais("valorFrete", v)} />
-                <Field id="t-seg" label="Seguro" inputMode="decimal" value={nfeData!.valoresTotais.valorSeguro || ""} onChange={(v) => patchTotais("valorSeguro", v)} />
-                <Field id="t-desc" label="Desconto" inputMode="decimal" value={nfeData!.valoresTotais.valorDesconto || ""} onChange={(v) => patchTotais("valorDesconto", v)} />
-                <Field id="t-ipi" label="IPI" inputMode="decimal" value={nfeData!.valoresTotais.valorIPI || ""} onChange={(v) => patchTotais("valorIPI", v)} />
-                <Field id="t-out" label="Outras Despesas" inputMode="decimal" value={nfeData!.valoresTotais.valorOutrasDespesas || ""} onChange={(v) => patchTotais("valorOutrasDespesas", v)} />
-                <Field id="t-trib" label="Total Tributos" inputMode="decimal" value={nfeData!.valoresTotais.valorTotalTributos || ""} onChange={(v) => patchTotais("valorTotalTributos", v)} />
+                <Field id="t-bc" label="Base Cálculo ICMS" inputMode="decimal" value={nfeData!.valoresTotais?.baseCalculoICMS || ""} onChange={(v) => patchTotais("baseCalculoICMS", v)} />
+                <Field id="t-icms" label="Valor ICMS" inputMode="decimal" value={nfeData!.valoresTotais?.valorICMS || ""} onChange={(v) => patchTotais("valorICMS", v)} />
+                <Field id="t-prod" label="Vlr. Produtos" inputMode="decimal" value={nfeData!.valoresTotais?.valorProdutos || ""} onChange={(v) => patchTotais("valorProdutos", v)} />
+                <Field id="t-frete" label="Frete" inputMode="decimal" value={nfeData!.valoresTotais?.valorFrete || ""} onChange={(v) => patchTotais("valorFrete", v)} />
+                <Field id="t-seg" label="Seguro" inputMode="decimal" value={nfeData!.valoresTotais?.valorSeguro || ""} onChange={(v) => patchTotais("valorSeguro", v)} />
+                <Field id="t-desc" label="Desconto" inputMode="decimal" value={nfeData!.valoresTotais?.valorDesconto || ""} onChange={(v) => patchTotais("valorDesconto", v)} />
+                <Field id="t-ipi" label="IPI" inputMode="decimal" value={nfeData!.valoresTotais?.valorIPI || ""} onChange={(v) => patchTotais("valorIPI", v)} />
+                <Field id="t-out" label="Outras Despesas" inputMode="decimal" value={nfeData!.valoresTotais?.valorOutrasDespesas || ""} onChange={(v) => patchTotais("valorOutrasDespesas", v)} />
+                <Field id="t-trib" label="Total Tributos" inputMode="decimal" value={nfeData!.valoresTotais?.valorTotalTributos || ""} onChange={(v) => patchTotais("valorTotalTributos", v)} />
               </div>
             </div>
           )}
@@ -550,18 +553,18 @@ export default function ValidacaoPage() {
               <div className="pt-4 border-t border-gray-100">
                 <h4 className="text-sm font-semibold text-gray-800 mb-3">Componentes do Valor da Prestação</h4>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                  <Field id="cv-fretePeso" label="Frete Peso (R$)" inputMode="decimal" value={cteData!.componentesValor.freteBaseCalculo || ""} onChange={(v) => patchComponentes("freteBaseCalculo", v)} />
-                  <Field id="cv-freteValor" label="Frete Valor (R$)" inputMode="decimal" value={cteData!.componentesValor.freteValor || ""} onChange={(v) => patchComponentes("freteValor", v)} />
-                  <Field id="cv-pedagio" label="Pedágio (R$)" inputMode="decimal" value={cteData!.componentesValor.pedagio || ""} onChange={(v) => patchComponentes("pedagio", v)} />
-                  <Field id="cv-despacho" label="Despacho (R$)" inputMode="decimal" value={cteData!.componentesValor.despacho || ""} onChange={(v) => patchComponentes("despacho", v)} />
-                  <Field id="cv-secCat" label="Sec/Cat (R$)" inputMode="decimal" value={cteData!.componentesValor.secCat || ""} onChange={(v) => patchComponentes("secCat", v)} />
-                  <Field id="cv-outras" label="Outras (R$)" inputMode="decimal" value={cteData!.componentesValor.outras || ""} onChange={(v) => patchComponentes("outras", v)} />
-                  <Field id="cv-gris" label="Gris (R$)" inputMode="decimal" value={cteData!.componentesValor.gris || ""} onChange={(v) => patchComponentes("gris", v)} />
-                  <Field id="cv-plusService" label="Plus Service (R$)" inputMode="decimal" value={cteData!.componentesValor.plusService || ""} onChange={(v) => patchComponentes("plusService", v)} />
-                  <Field id="cv-suframa" label="Suframa (R$)" inputMode="decimal" value={cteData!.componentesValor.suframa || ""} onChange={(v) => patchComponentes("suframa", v)} />
-                  <Field id="cv-libSefaz" label="Lib. Sefaz (R$)" inputMode="decimal" value={cteData!.componentesValor.libSefaz || ""} onChange={(v) => patchComponentes("libSefaz", v)} />
-                  <Field id="cv-dce" label="DCE (R$)" inputMode="decimal" value={cteData!.componentesValor.dce || ""} onChange={(v) => patchComponentes("dce", v)} />
-                  <Field id="cv-txNordeste" label="Tx. Nordeste (R$)" inputMode="decimal" value={cteData!.componentesValor.txNordeste || ""} onChange={(v) => patchComponentes("txNordeste", v)} />
+                  <Field id="cv-fretePeso" label="Frete Peso (R$)" inputMode="decimal" value={cteData!.componentesValor?.freteBaseCalculo || ""} onChange={(v) => patchComponentes("freteBaseCalculo", v)} />
+                  <Field id="cv-freteValor" label="Frete Valor (R$)" inputMode="decimal" value={cteData!.componentesValor?.freteValor || ""} onChange={(v) => patchComponentes("freteValor", v)} />
+                  <Field id="cv-pedagio" label="Pedágio (R$)" inputMode="decimal" value={cteData!.componentesValor?.pedagio || ""} onChange={(v) => patchComponentes("pedagio", v)} />
+                  <Field id="cv-despacho" label="Despacho (R$)" inputMode="decimal" value={cteData!.componentesValor?.despacho || ""} onChange={(v) => patchComponentes("despacho", v)} />
+                  <Field id="cv-secCat" label="Sec/Cat (R$)" inputMode="decimal" value={cteData!.componentesValor?.secCat || ""} onChange={(v) => patchComponentes("secCat", v)} />
+                  <Field id="cv-outras" label="Outras (R$)" inputMode="decimal" value={cteData!.componentesValor?.outras || ""} onChange={(v) => patchComponentes("outras", v)} />
+                  <Field id="cv-gris" label="Gris (R$)" inputMode="decimal" value={cteData!.componentesValor?.gris || ""} onChange={(v) => patchComponentes("gris", v)} />
+                  <Field id="cv-plusService" label="Plus Service (R$)" inputMode="decimal" value={cteData!.componentesValor?.plusService || ""} onChange={(v) => patchComponentes("plusService", v)} />
+                  <Field id="cv-suframa" label="Suframa (R$)" inputMode="decimal" value={cteData!.componentesValor?.suframa || ""} onChange={(v) => patchComponentes("suframa", v)} />
+                  <Field id="cv-libSefaz" label="Lib. Sefaz (R$)" inputMode="decimal" value={cteData!.componentesValor?.libSefaz || ""} onChange={(v) => patchComponentes("libSefaz", v)} />
+                  <Field id="cv-dce" label="DCE (R$)" inputMode="decimal" value={cteData!.componentesValor?.dce || ""} onChange={(v) => patchComponentes("dce", v)} />
+                  <Field id="cv-txNordeste" label="Tx. Nordeste (R$)" inputMode="decimal" value={cteData!.componentesValor?.txNordeste || ""} onChange={(v) => patchComponentes("txNordeste", v)} />
                 </div>
               </div>
 

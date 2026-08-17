@@ -14,6 +14,7 @@ export const mockNotaFiscal: NotaFiscalData = {
   emitente: {
     nome: "MARTINS COM SERV DISTR SA",
     cnpj: "43.214.055/0047-90",
+    cpfCnpj: "43.214.055/0047-90",
     inscricaoEstadual: "7025134600989",
     endereco: "AV JOSE ANDRAUS GASSANI, 5400 SALA1 - DIST INDUSTRIAL",
     bairro: "DISTRITO INDUSTRIAL",
@@ -25,6 +26,7 @@ export const mockNotaFiscal: NotaFiscalData = {
 
   destinatario: {
     nome: "CLARA GONCALVES DAMASIO",
+    cnpj: "",
     cpfCnpj: "156.843.566-56",
     endereco: "RUA ANTONINA DIAS BELTRAO, 84 APARTAMENTO 90C",
     bairro: "MATOZINHOS",
@@ -99,6 +101,7 @@ export const mockNotasFiscais: NotaFiscalData[] = [
     emitente: {
       nome: "MARTINS COM SERV DISTR SA",
       cnpj: "43.214.055/0047-90",
+      cpfCnpj: "43.214.055/0047-90",
       inscricaoEstadual: "7025134600989",
       endereco: "AV JOSE ANDRAUS GASSANI, 5400 SALA1 - DIST INDUSTRIAL",
       bairro: "DISTRITO INDUSTRIAL",
@@ -109,6 +112,7 @@ export const mockNotasFiscais: NotaFiscalData[] = [
     },
     destinatario: {
       nome: "JOAO SILVA SANTOS",
+      cnpj: "",
       cpfCnpj: "123.456.789-00",
       endereco: "RUA DAS FLORES, 123",
       bairro: "CENTRO",
@@ -167,6 +171,7 @@ export const mockNotasFiscais: NotaFiscalData[] = [
     emitente: {
       nome: "MARTINS COM SERV DISTR SA",
       cnpj: "43.214.055/0047-90",
+      cpfCnpj: "43.214.055/0047-90",
       inscricaoEstadual: "7025134600989",
       endereco: "AV JOSE ANDRAUS GASSANI, 5400 SALA1 - DIST INDUSTRIAL",
       bairro: "DISTRITO INDUSTRIAL",
@@ -177,6 +182,7 @@ export const mockNotasFiscais: NotaFiscalData[] = [
     },
     destinatario: {
       nome: "MARIA OLIVEIRA COSTA",
+      cnpj: "",
       cpfCnpj: "987.654.321-11",
       endereco: "AVENIDA BRASIL, 456 CASA 2",
       bairro: "SAO JOSE",
@@ -235,6 +241,7 @@ export const mockNotasFiscais: NotaFiscalData[] = [
     emitente: {
       nome: "MARTINS COM SERV DISTR SA",
       cnpj: "43.214.055/0047-90",
+      cpfCnpj: "43.214.055/0047-90",
       inscricaoEstadual: "7025134600989",
       endereco: "AV JOSE ANDRAUS GASSANI, 5400 SALA1 - DIST INDUSTRIAL",
       bairro: "DISTRITO INDUSTRIAL",
@@ -245,6 +252,7 @@ export const mockNotasFiscais: NotaFiscalData[] = [
     },
     destinatario: {
       nome: "PEDRO HENRIQUE ALVES",
+      cnpj: "",
       cpfCnpj: "456.789.123-22",
       endereco: "RUA DO COMERCIO, 789 LOJA 1",
       bairro: "CENTRO",
@@ -292,6 +300,7 @@ export const mockNotasFiscais: NotaFiscalData[] = [
     emitente: {
       nome: "MARTINS COM SERV DISTR SA",
       cnpj: "43.214.055/0047-90",
+      cpfCnpj: "43.214.055/0047-90",
       inscricaoEstadual: "7025134600989",
       endereco: "AV JOSE ANDRAUS GASSANI, 5400 SALA1 - DIST INDUSTRIAL",
       bairro: "DISTRITO INDUSTRIAL",
@@ -302,6 +311,7 @@ export const mockNotasFiscais: NotaFiscalData[] = [
     },
     destinatario: {
       nome: "ANA PAULA RODRIGUES",
+      cnpj: "",
       cpfCnpj: "321.654.987-33",
       endereco: "TRAVESSA DA PAZ, 321 APTO 101",
       bairro: "BOA VISTA",
@@ -349,6 +359,7 @@ export const mockNotasFiscais: NotaFiscalData[] = [
     emitente: {
       nome: "MARTINS COM SERV DISTR SA",
       cnpj: "43.214.055/0047-90",
+      cpfCnpj: "43.214.055/0047-90",
       inscricaoEstadual: "7025134600989",
       endereco: "AV JOSE ANDRAUS GASSANI, 5400 SALA1 - DIST INDUSTRIAL",
       bairro: "DISTRITO INDUSTRIAL",
@@ -359,6 +370,7 @@ export const mockNotasFiscais: NotaFiscalData[] = [
     },
     destinatario: {
       nome: "CARLOS EDUARDO LIMA",
+      cnpj: "",
       cpfCnpj: "654.321.987-44",
       endereco: "RUA NOVA, 654",
       bairro: "SANTA TEREZA",
@@ -406,6 +418,7 @@ export const mockNotasFiscais: NotaFiscalData[] = [
     emitente: {
       nome: "MARTINS COM SERV DISTR SA",
       cnpj: "43.214.055/0047-90",
+      cpfCnpj: "43.214.055/0047-90",
       inscricaoEstadual: "7025134600989",
       endereco: "AV JOSE ANDRAUS GASSANI, 5400 SALA1 - DIST INDUSTRIAL",
       bairro: "DISTRITO INDUSTRIAL",
@@ -416,6 +429,7 @@ export const mockNotasFiscais: NotaFiscalData[] = [
     },
     destinatario: {
       nome: "LUCAS FERNANDO SOUZA",
+      cnpj: "",
       cpfCnpj: "987.123.456-55",
       endereco: "AVENIDA PRINCIPAL, 987",
       bairro: "VILA NOVA",
@@ -474,6 +488,7 @@ export const mockNotasFiscais: NotaFiscalData[] = [
     emitente: {
       nome: "MARTINS COM SERV DISTR SA",
       cnpj: "43.214.055/0047-90",
+      cpfCnpj: "43.214.055/0047-90",
       inscricaoEstadual: "7025134600989",
       endereco: "AV JOSE ANDRAUS GASSANI, 5400 SALA1 - DIST INDUSTRIAL",
       bairro: "DISTRITO INDUSTRIAL",
@@ -484,6 +499,7 @@ export const mockNotasFiscais: NotaFiscalData[] = [
     },
     destinatario: {
       nome: "JULIANA CRISTINA MENDES",
+      cnpj: "",
       cpfCnpj: "456.987.123-66",
       endereco: "RUA DAS ACACIAS, 246",
       bairro: "JARDIM DAS ACACIAS",
@@ -531,6 +547,7 @@ export const mockNotasFiscais: NotaFiscalData[] = [
     emitente: {
       nome: "MARTINS COM SERV DISTR SA",
       cnpj: "43.214.055/0047-90",
+      cpfCnpj: "43.214.055/0047-90",
       inscricaoEstadual: "7025134600989",
       endereco: "AV JOSE ANDRAUS GASSANI, 5400 SALA1 - DIST INDUSTRIAL",
       bairro: "DISTRITO INDUSTRIAL",
@@ -541,6 +558,7 @@ export const mockNotasFiscais: NotaFiscalData[] = [
     },
     destinatario: {
       nome: "ROBERTO GARCIA PEREIRA",
+      cnpj: "",
       cpfCnpj: "789.456.123-77",
       endereco: "AVENIDA SAO JOSE, 135",
       bairro: "SAO JOSE",
@@ -588,6 +606,7 @@ export const mockNotasFiscais: NotaFiscalData[] = [
     emitente: {
       nome: "MARTINS COM SERV DISTR SA",
       cnpj: "43.214.055/0047-90",
+      cpfCnpj: "43.214.055/0047-90",
       inscricaoEstadual: "7025134600989",
       endereco: "AV JOSE ANDRAUS GASSANI, 5400 SALA1 - DIST INDUSTRIAL",
       bairro: "DISTRITO INDUSTRIAL",
@@ -598,6 +617,7 @@ export const mockNotasFiscais: NotaFiscalData[] = [
     },
     destinatario: {
       nome: "FERNANDA LUZIA MARTINS",
+      cnpj: "",
       cpfCnpj: "321.789.456-88",
       endereco: "RUA DA ESPERANCA, 876",
       bairro: "ESPERANCA",
@@ -645,6 +665,7 @@ export const mockNotasFiscais: NotaFiscalData[] = [
     emitente: {
       nome: "MARTINS COM SERV DISTR SA",
       cnpj: "43.214.055/0047-90",
+      cpfCnpj: "43.214.055/0047-90",
       inscricaoEstadual: "7025134600989",
       endereco: "AV JOSE ANDRAUS GASSANI, 5400 SALA1 - DIST INDUSTRIAL",
       bairro: "DISTRITO INDUSTRIAL",
@@ -655,6 +676,7 @@ export const mockNotasFiscais: NotaFiscalData[] = [
     },
     destinatario: {
       nome: "RICARDO SANTOS OLIVEIRA",
+      cnpj: "",
       cpfCnpj: "654.123.789-99",
       endereco: "TRAVESSA DO SOL, 543",
       bairro: "SOLAR",

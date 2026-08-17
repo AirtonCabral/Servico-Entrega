@@ -194,7 +194,9 @@ export default function ListaNfesPage() {
                       {item.data.destinatario.endereco || "-"}
                     </td>
                     <td className="py-3 text-gray-600">
-                      {item.data.destinatario.bairro || "-"}
+                      {item.tipo === "cte"
+                        ? "-"
+                        : (item.data as any).destinatario.bairro || "-"}
                     </td>
                   </tr>
                 ))}
