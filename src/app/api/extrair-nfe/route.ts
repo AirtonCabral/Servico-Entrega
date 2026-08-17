@@ -9,6 +9,7 @@ export const maxDuration = 300;
 
 const OCR_TIMEOUT_MS = 42_000;
 const MAX_BASE64_CHARS = 7_000_000;
+const MAX_IMAGE_WIDTH = 2200;
 
 type TipoDocumento = "nfe" | "cte";
 
@@ -26,6 +27,12 @@ type ResultadoRegiao = {
   confianca: number;
 };
 
+type ImagemPreparada = {
+  buffer: Buffer;
+  width: number;
+  height: number;
+};
+
 function jsonError(error: string, status: number) {
   return NextResponse.json(
     {
@@ -36,20 +43,47 @@ function jsonError(error: string, status: number) {
   );
 }
 
+function dataUrlParaBuffer(dataUrl: string): Buffer {
+  const base64 = dataUrl.replace(/^data:image\/(png|jpeg|jpg|webp);base64,/, "");
+  return Buffer.from(base64, "base64");
+}
 
-async function getImageDimensions(dataUrl: string) {
-  const base64 = dataUrl.replace(/^data:image\/\w+;base64,/, "");
-  const buffer = Buffer.from(base64, "base64");
+async function prepararImagem(dataUrl: string): Promise<ImagemPreparada> {
+  const input = dataUrlParaBuffer(dataUrl);
 
-  const metadata = await sharp(buffer).metadata();
+  const image = sharp(input, {
+    failOn: "none",
+  }).rotate();
+
+  const metadata = await image.metadata();
 
   if (!metadata.width || !metadata.height) {
     throw new Error("Não foi possível identificar as dimensões da imagem.");
   }
 
+  // Evita mandar fotos enormes ao OCR, reduzindo CPU, memória e tempo.
+  // Não aumenta imagens pequenas para não piorar artefatos.
+  const buffer = await image
+    .resize({
+      width: MAX_IMAGE_WIDTH,
+      withoutEnlargement: true,
+    })
+    .grayscale()
+    .normalize()
+    .sharpen()
+    .png()
+    .toBuffer();
+
+  const processedMetadata = await sharp(buffer).metadata();
+
+  if (!processedMetadata.width || !processedMetadata.height) {
+    throw new Error("Não foi possível preparar a imagem para OCR.");
+  }
+
   return {
-    width: metadata.width,
-    height: metadata.height,
+    buffer,
+    width: processedMetadata.width,
+    height: processedMetadata.height,
   };
 }
 
@@ -66,15 +100,15 @@ function criarRegioesDanfe(
       left: 0,
       top: 0,
       width: Math.round(w * 0.6),
-      height: Math.round(h * 0.2),
+      height: Math.round(h * 0.18),
       psm: PSM.SINGLE_BLOCK,
     },
     {
       nome: "chaveAcesso",
-      left: Math.round(w * 0.58),
+      left: Math.round(w * 0.56),
       top: 0,
-      width: Math.round(w * 0.42),
-      height: Math.round(h * 0.13),
+      width: Math.round(w * 0.44),
+      height: Math.round(h * 0.14),
       psm: PSM.SINGLE_BLOCK,
     },
     {
@@ -82,62 +116,97 @@ function criarRegioesDanfe(
       left: 0,
       top: Math.round(h * 0.18),
       width: w,
-      height: Math.round(h * 0.14),
+      height: Math.round(h * 0.15),
       psm: PSM.SINGLE_BLOCK,
     },
     {
       nome: "dadosNfe",
       left: 0,
-      top: Math.round(h * 0.12),
+      top: Math.round(h * 0.1),
       width: w,
-      height: Math.round(h * 0.2),
+      height: Math.round(h * 0.23),
       psm: PSM.SINGLE_BLOCK,
     },
     {
       nome: "totais",
-      left: Math.round(w * 0.55),
-      top: Math.round(h * 0.8),
-      width: Math.round(w * 0.45),
-      height: Math.round(h * 0.16),
+      left: Math.round(w * 0.52),
+      top: Math.round(h * 0.78),
+      width: Math.round(w * 0.48),
+      height: Math.round(h * 0.18),
       psm: PSM.SINGLE_BLOCK,
     },
   ];
 }
 
+async function criarWorker(nome: string): Promise<Worker> {
+  return createWorker("por", 1, {
+    logger: (event) => {
+      if (event.status === "recognizing text") {
+        console.log(
+          `[OCR:${nome}] ${Math.round(event.progress * 100)}%`,
+        );
+      }
+    },
+  });
+}
+
 async function reconhecerRegiao(
   worker: Worker,
-  image: string,
+  image: Buffer,
   regiao: RegiaoOcr,
 ): Promise<[string, ResultadoRegiao]> {
-  const result = await worker.recognize(image, {
+  const result = await worker.recognize(image, {}, {
     rectangle: {
       left: regiao.left,
       top: regiao.top,
       width: regiao.width,
       height: regiao.height,
     },
+    tessedit_pageseg_mode: regiao.psm,
   });
 
   return [
     regiao.nome,
     {
       texto: result.data.text.trim(),
-      confianca: result.data.confidence,
+      confianca: Math.round(result.data.confidence),
     },
   ];
 }
 
+async function reconhecerTextoCompleto(
+  worker: Worker,
+  image: Buffer,
+): Promise<string> {
+  await worker.setParameters({
+    tessedit_pageseg_mode: PSM.SINGLE_COLUMN,
+  });
+
+  const result = await worker.recognize(image);
+
+  return result.data.text.trim();
+}
+
+async function encerrarWorker(worker?: Worker) {
+  if (!worker) return;
+
+  try {
+    await worker.terminate();
+  } catch (error) {
+    console.error("[OCR] erro ao encerrar worker:", error);
+  }
+}
+
 export async function POST(req: Request) {
-  let worker: Worker | undefined;
+  let workerCompleto: Worker | undefined;
+  let workerRegioes: Worker | undefined;
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
 
   const startedAt = performance.now();
 
   try {
     console.time("[OCR] body");
-
     const body = await req.json();
-
     console.timeEnd("[OCR] body");
 
     const image = body?.image;
@@ -157,17 +226,13 @@ export async function POST(req: Request) {
       );
     }
 
-    console.time("[OCR] criar worker");
+    console.time("[OCR] preparar imagem");
+    const imagemPreparada = await prepararImagem(image);
+    console.timeEnd("[OCR] preparar imagem");
 
-    worker = await createWorker("por", 1, {
-      logger: (event) => {
-        if (event.status === "recognizing text") {
-          console.log(`[OCR] ${Math.round(event.progress * 100)}%`);
-        }
-      },
-    });
-
-    console.timeEnd("[OCR] criar worker");
+    console.log(
+      `[OCR] imagem preparada: ${imagemPreparada.width}x${imagemPreparada.height}`,
+    );
 
     const timeout = new Promise<never>((_, reject) => {
       timeoutId = setTimeout(() => {
@@ -179,44 +244,52 @@ export async function POST(req: Request) {
       }, OCR_TIMEOUT_MS);
     });
 
+    console.time("[OCR] criar workers");
+
+    // CT-e mantém um único OCR completo, pois ainda não há regiões específicas.
+    if (tipoDocumento === "cte") {
+      workerCompleto = await criarWorker("completo");
+    } else {
+      [workerCompleto, workerRegioes] = await Promise.all([
+        criarWorker("completo"),
+        criarWorker("regioes"),
+      ]);
+    }
+
+    console.timeEnd("[OCR] criar workers");
+
     console.time("[OCR] reconhecer");
 
     const recognition = (async () => {
       if (tipoDocumento === "cte") {
-        await worker!.setParameters({
-          tessedit_pageseg_mode: PSM.SINGLE_COLUMN,
-        });
-
-        const result = await worker!.recognize(image);
+        const textoCompleto = await reconhecerTextoCompleto(
+          workerCompleto!,
+          imagemPreparada.buffer,
+        );
 
         return {
-          textoCompleto: result.data.text.trim(),
+          textoCompleto,
           regioes: {},
         };
       }
 
-      const { width, height } = await getImageDimensions(image);
-      const regioesDanfe = criarRegioesDanfe(width, height);
+      const regioes = criarRegioesDanfe(
+        imagemPreparada.width,
+        imagemPreparada.height,
+      );
 
-      // Um worker processa uma tarefa por vez.
-      // Executamos os campos prioritários primeiro para reduzir o tempo útil.
-      const regioesEntries: Array<[string, ResultadoRegiao]> = [];
-
-      for (const regiao of regioesDanfe) {
-        const resultado = await reconhecerRegiao(worker!, image, regiao);
-        regioesEntries.push(resultado);
-      }
-
-      // Mantém compatibilidade com os extratores existentes,
-      // especialmente para tabela de itens e campos fora das regiões acima.
-      await worker!.setParameters({
-        tessedit_pageseg_mode: PSM.SINGLE_COLUMN,
-      });
-
-      const resultCompleto = await worker!.recognize(image);
+      // OCR integral e OCR por campos ocorrem simultaneamente.
+      const [textoCompleto, regioesEntries] = await Promise.all([
+        reconhecerTextoCompleto(workerCompleto!, imagemPreparada.buffer),
+        Promise.all(
+          regioes.map((regiao) =>
+            reconhecerRegiao(workerRegioes!, imagemPreparada.buffer, regiao),
+          ),
+        ),
+      ]);
 
       return {
-        textoCompleto: resultCompleto.data.text.trim(),
+        textoCompleto,
         regioes: Object.fromEntries(regioesEntries),
       };
     })();
@@ -243,21 +316,17 @@ export async function POST(req: Request) {
 
     console.timeEnd("[OCR] interpretar");
 
-    console.log(
-      `[OCR] total: ${Math.round(performance.now() - startedAt)} ms`,
-    );
+    const tempoMs = Math.round(performance.now() - startedAt);
+
+    console.log(`[OCR] total: ${tempoMs} ms`);
 
     return NextResponse.json({
       success: true,
       tipo: tipoDocumento,
       data,
       textoOcr: texto,
-
-      // Útil para revisar os blocos no frontend e evoluir
-      // seus extratores para usar OCR por campo.
       ocrPorRegiao: ocrResult.regioes,
-
-      tempoMs: Math.round(performance.now() - startedAt),
+      tempoMs,
     });
   } catch (error) {
     console.error("[extrair-nfe] erro:", error);
@@ -282,15 +351,9 @@ export async function POST(req: Request) {
       clearTimeout(timeoutId);
     }
 
-    if (worker) {
-      try {
-        await worker.terminate();
-      } catch (terminateError) {
-        console.error(
-          "[extrair-nfe] erro ao encerrar worker:",
-          terminateError,
-        );
-      }
-    }
+    await Promise.all([
+      encerrarWorker(workerCompleto),
+      encerrarWorker(workerRegioes),
+    ]);
   }
 }
