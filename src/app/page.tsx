@@ -87,50 +87,113 @@ export default function UploadPage() {
   };
 
   const handleExtrair = async () => {
-    if (!file || !imagePreview) return;
-    setStep("processing");
-    setProgress(10);
-    setErrorMessage("");
+  if (!file || !imagePreview) return;
 
-    try {
-      const progressTimer = setInterval(() => {
-        setProgress((p) => (p < 85 ? p + Math.random() * 12 : p));
-      }, 400);
+  setStep("processing");
+  setProgress(10);
+  setErrorMessage("");
 
-      const res = await fetch("/api/extrair-nfe", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ image: imagePreview, tipo: tipoDocumento }),
+  const progressTimer = setInterval(() => {
+    setProgress((current) =>
+      current < 85 ? Math.min(85, current + Math.random() * 12) : current,
+    );
+  }, 400);
+
+  try {
+    const res = await fetch("/api/extrair-nfe", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        image: imagePreview,
+        tipo: tipoDocumento,
+      }),
+    });
+
+    const contentType = res.headers.get("content-type") ?? "";
+    const isJson = contentType.includes("application/json");
+
+    const responseBody = isJson ? await res.json() : await res.text();
+
+    if (!res.ok) {
+      console.error("Erro da API:", {
+        status: res.status,
+        statusText: res.statusText,
+        responseBody,
       });
-      const json = await res.json();
-      clearInterval(progressTimer);
 
-      if (!res.ok || !json.success) {
+      if (res.status === 504 || res.status === 408) {
         throw new Error(
-          json.error ||
-            "Não foi possível extrair os dados do documento. Tente novamente.",
+          "A extração demorou mais que o esperado. Tente novamente com uma imagem menor ou mais nítida.",
         );
       }
 
-      setProgress(100);
-      // json.tipo vem confirmado pelo backend; usamos como fonte de verdade
-      const tipoConfirmado: TipoDocumento = json.tipo === "cte" ? "cte" : "nfe";
-      setStoredData(
-        tipoConfirmado,
-        json.data as NotaFiscalData | CteData,
-        imagePreview,
-      );
+      if (typeof responseBody === "object" && responseBody !== null) {
+        throw new Error(
+          responseBody.error ||
+            responseBody.message ||
+            "Não foi possível extrair os dados do documento.",
+        );
+      }
 
-      setTimeout(() => {
-        router.push("/validacao");
-      }, 400);
-    } catch (err) {
-      const msg =
-        err instanceof Error ? err.message : "Erro desconhecido no servidor.";
-      setErrorMessage(msg);
-      setStep("error");
+      throw new Error(
+        "O servidor não conseguiu processar o documento. Tente novamente em instantes.",
+      );
     }
-  };
+
+    if (!isJson || typeof responseBody !== "object" || responseBody === null) {
+      console.error("Resposta inesperada da API:", responseBody);
+
+      throw new Error(
+        "O servidor retornou uma resposta inválida. Tente novamente.",
+      );
+    }
+
+    const json = responseBody as {
+      success?: boolean;
+      error?: string;
+      message?: string;
+      tipo?: "nfe" | "cte";
+      data?: NotaFiscalData | CteData;
+    };
+
+    if (!json.success || !json.data) {
+      throw new Error(
+        json.error ||
+          json.message ||
+          "Não foi possível extrair os dados do documento. Tente novamente.",
+      );
+    }
+
+    setProgress(100);
+
+    const tipoConfirmado: TipoDocumento =
+      json.tipo === "cte" ? "cte" : "nfe";
+
+    setStoredData(
+      tipoConfirmado,
+      json.data,
+      imagePreview,
+    );
+
+    setTimeout(() => {
+      router.push("/validacao");
+    }, 400);
+  } catch (err) {
+    console.error("Falha ao extrair documento:", err);
+
+    const message =
+      err instanceof Error
+        ? err.message
+        : "Erro desconhecido ao processar o documento.";
+
+    setErrorMessage(message);
+    setStep("error");
+  } finally {
+    clearInterval(progressTimer);
+  }
+};
 
   const handleReset = () => {
     setImagePreview(null);
