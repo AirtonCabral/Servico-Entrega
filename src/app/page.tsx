@@ -1,9 +1,10 @@
+// app/page.tsx
 "use client";
 
 import { useState, useRef, useCallback, DragEvent, ChangeEvent } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import type { NotaFiscalData, CteData, TipoDocumento } from "@/lib/types";
+import { useOcr } from "@/app/hooks/useOcr";
 
 type Step = "idle" | "uploading" | "processing" | "error";
 
@@ -13,10 +14,12 @@ export default function UploadPage() {
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [step, setStep] = useState<Step>("idle");
-  const [progress, setProgress] = useState(0);
   const [errorMessage, setErrorMessage] = useState<string>("");
   const [isDragOver, setIsDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  // Usar o hook de OCR client-side
+  const { processarImagem, isLoading, progress, statusMessage } = useOcr();
 
   const setStoredData = (
     tipo: TipoDocumento,
@@ -42,10 +45,7 @@ export default function UploadPage() {
       reader.readAsDataURL(f);
     });
 
-  // Redimensiona a imagem no navegador antes de enviar. Fotos de celular
-  // costumam vir com 3000-4000px de largura, o que deixa o OCR bem mais
-  // lento (e no Vercel aumenta a chance de estourar o tempo da função).
-  // 1800px de largura mantém a nitidez do texto e acelera bastante.
+  // Redimensiona a imagem no navegador antes de processar
   const redimensionarImagem = (dataUrl: string, larguraMax = 1800): Promise<string> =>
     new Promise((resolve, reject) => {
       const img = new Image();
@@ -118,31 +118,35 @@ export default function UploadPage() {
   const handleExtrair = async () => {
     if (!file || !imagePreview) return;
     setStep("processing");
-    setProgress(10);
     setErrorMessage("");
 
     try {
-      const progressTimer = setInterval(() => {
-        setProgress((p) => (p < 85 ? p + Math.random() * 12 : p));
-      }, 400);
+      // 1. Processar OCR no cliente
+      const ocrResult = await processarImagem(imagePreview, tipoDocumento);
+      
+      if (!ocrResult.textoCompleto || ocrResult.textoCompleto.length < 10) {
+        throw new Error("Não foi possível identificar texto suficiente na imagem.");
+      }
 
+      // 2. Enviar apenas o texto para o servidor para parse
       const res = await fetch("/api/extrair-nfe", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ image: imagePreview, tipo: tipoDocumento }),
+        body: JSON.stringify({ 
+          texto: ocrResult.textoCompleto,
+          tipo: tipoDocumento 
+        }),
       });
+      
       const json = await res.json();
-      clearInterval(progressTimer);
 
       if (!res.ok || !json.success) {
         throw new Error(
-          json.error ||
-            "Não foi possível extrair os dados do documento. Tente novamente.",
+          json.error || "Não foi possível extrair os dados do documento.",
         );
       }
 
-      setProgress(100);
-      // json.tipo vem confirmado pelo backend; usamos como fonte de verdade
+      // 3. Salvar resultado
       const tipoConfirmado: TipoDocumento = json.tipo === "cte" ? "cte" : "nfe";
       setStoredData(
         tipoConfirmado,
@@ -150,12 +154,12 @@ export default function UploadPage() {
         imagePreview,
       );
 
+      // 4. Navegar para validação
       setTimeout(() => {
         router.push("/validacao");
       }, 400);
     } catch (err) {
-      const msg =
-        err instanceof Error ? err.message : "Erro desconhecido no servidor.";
+      const msg = err instanceof Error ? err.message : "Erro desconhecido.";
       setErrorMessage(msg);
       setStep("error");
     }
@@ -165,7 +169,6 @@ export default function UploadPage() {
     setImagePreview(null);
     setFile(null);
     setStep("idle");
-    setProgress(0);
     setErrorMessage("");
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
@@ -180,8 +183,11 @@ export default function UploadPage() {
         </h1>
         <p className="mt-3 text-sm sm:text-base text-gray-600 max-w-2xl mx-auto">
           {isCte
-            ? "Envie uma foto ou scan nítido do seu CT-e (DACTE). Nosso sistema extrai automaticamente remetente, destinatário, componentes do frete e impostos para você revisar."
-            : "Envie uma foto ou scan nítido da sua NF-e (DANFE). Nosso sistema extrai automaticamente emissor, destinatário, itens e valores para você revisar."}
+            ? "Envie uma foto ou scan nítido do seu CT-e (DACTE). O OCR é processado no seu navegador e os dados são extraídos automaticamente."
+            : "Envie uma foto ou scan nítido da sua NF-e (DANFE). O OCR é processado no seu navegador e os dados são extraídos automaticamente."}
+        </p>
+        <p className="mt-2 text-xs text-green-600">
+          🔒 Processamento local - sua imagem nunca é enviada para o servidor
         </p>
       </div>
 
@@ -191,7 +197,7 @@ export default function UploadPage() {
           <button
             type="button"
             onClick={() => setTipoDocumento("nfe")}
-            disabled={step === "processing"}
+            disabled={step === "processing" || isLoading}
             className={`flex-1 inline-flex items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-medium transition ${
               !isCte
                 ? "bg-white text-primary-700 shadow-sm border border-gray-200"
@@ -203,7 +209,7 @@ export default function UploadPage() {
           <button
             type="button"
             onClick={() => setTipoDocumento("cte")}
-            disabled={step === "processing"}
+            disabled={step === "processing" || isLoading}
             className={`flex-1 inline-flex items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-medium transition ${
               isCte
                 ? "bg-white text-primary-700 shadow-sm border border-gray-200"
@@ -214,8 +220,7 @@ export default function UploadPage() {
           </button>
         </div>
         <p className="mt-2 text-center text-xs text-gray-500">
-          Escolha o tipo de documento antes de enviar a imagem — isso ajuda o
-          sistema a extrair os campos corretos.
+          Escolha o tipo de documento antes de enviar a imagem
         </p>
       </div>
 
@@ -319,7 +324,6 @@ export default function UploadPage() {
               className={`aspect-[4/3] w-full rounded-lg border border-gray-200 bg-gray-50 grid place-items-center overflow-hidden`}
             >
               {imagePreview ? (
-                // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={imagePreview}
                   alt={`Pré-visualização do ${isCte ? "CT-e" : "NF-e"}`}
@@ -348,13 +352,12 @@ export default function UploadPage() {
               )}
             </div>
 
-            {(step === "processing" || step === "uploading") && (
+            {/* Progresso do OCR client-side */}
+            {(step === "processing" || isLoading) && (
               <div className="mt-5">
                 <div className="flex items-center justify-between text-xs mb-2">
                   <span className="font-medium text-gray-700">
-                    {step === "processing"
-                      ? "Extraindo dados com OCR..."
-                      : "Preparando imagem..."}
+                    {statusMessage || (step === "processing" ? "Processando OCR..." : "Preparando...")}
                   </span>
                   <span className="text-primary-600 font-semibold tabular-nums">
                     {Math.round(progress)}%
@@ -366,6 +369,9 @@ export default function UploadPage() {
                     style={{ width: `${progress}%` }}
                   />
                 </div>
+                <p className="mt-1 text-xs text-gray-500">
+                  ⚡ Processamento local no seu navegador
+                </p>
               </div>
             )}
 
@@ -392,7 +398,7 @@ export default function UploadPage() {
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
                 className="btn-secondary"
-                disabled={step === "processing"}
+                disabled={step === "processing" || isLoading}
               >
                 Trocar imagem
               </button>
@@ -403,10 +409,10 @@ export default function UploadPage() {
                 disabled={
                   !imagePreview ||
                   step === "processing" ||
-                  step === "uploading"
+                  isLoading
                 }
               >
-                {step === "processing" ? (
+                {(step === "processing" || isLoading) ? (
                   <>
                     <svg
                       className="animate-spin -ml-0.5 h-4 w-4"
@@ -428,7 +434,7 @@ export default function UploadPage() {
                         d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
                       />
                     </svg>
-                    Extraindo...
+                    {statusMessage || "Processando..."}
                   </>
                 ) : (
                   <>
@@ -453,11 +459,10 @@ export default function UploadPage() {
           <div className="card bg-gradient-to-br from-slate-900 to-slate-800 border-slate-800 text-white">
             <h3 className="font-semibold mb-2">Como funciona?</h3>
             <ol className="text-sm text-slate-300 space-y-2 list-decimal list-inside">
-              <li>
-                Escolha o tipo de documento ({isCte ? "CT-e / DACTE" : "NF-e / DANFE"})
-              </li>
+              <li>Escolha o tipo de documento ({isCte ? "CT-e / DACTE" : "NF-e / DANFE"})</li>
               <li>Envie a foto do documento</li>
-              <li>Sistema lê e organiza os dados automaticamente</li>
+              <li>OCR processado no seu navegador (local e privado)</li>
+              <li>Sistema extrai e organiza os dados automaticamente</li>
               <li>Revise, ajuste e confirme as informações</li>
             </ol>
           </div>

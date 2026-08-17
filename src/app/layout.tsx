@@ -1,6 +1,8 @@
+// app/layout.tsx
 import type { Metadata } from "next";
 import "./globals.css";
 import Navbar from "@/components/Navbar";
+import { PreloadTesseract } from "@/components/PreloadTesseract";
 
 export const metadata: Metadata = {
   title: "Validação de Nota Fiscal",
@@ -20,9 +22,17 @@ export default function RootLayout({
           <Navbar />
           <main className="flex-1 w-full">{children}</main>
           <footer className="py-6 text-center text-xs text-gray-500 border-t border-gray-200 bg-white">
-            © {new Date().getFullYear()} Sistema de Entrega · NF-e e Roteamento
+            <div className="container mx-auto px-4">
+              <p>
+                © {new Date().getFullYear()} Sistema de Entrega · NF-e e Roteamento
+              </p>
+              <p className="mt-1 text-gray-400">
+                🔒 Processamento OCR local no seu navegador - suas imagens nunca são enviadas ao servidor
+              </p>
+            </div>
           </footer>
         </div>
+        <PreloadTesseract />
       </body>
     </html>
   );
