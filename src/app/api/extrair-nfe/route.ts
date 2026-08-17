@@ -109,14 +109,13 @@ async function reconhecerRegiao(
   image: string,
   regiao: RegiaoOcr,
 ): Promise<[string, ResultadoRegiao]> {
-  const result = await worker.recognize(image, {}, {
+  const result = await worker.recognize(image, {
     rectangle: {
       left: regiao.left,
       top: regiao.top,
       width: regiao.width,
       height: regiao.height,
     },
-    tessedit_pageseg_mode: regiao.psm,
   });
 
   return [
