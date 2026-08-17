@@ -5,7 +5,7 @@ import Navbar from "@/components/Navbar";
 export const metadata: Metadata = {
   title: "Validação de Nota Fiscal",
   description:
-    "Envie uma foto da sua NF-e, extraia os dados automaticamente e valide as informações.",
+    "Envie uma foto da sua NF-e, extraia os dados com OCR e valide as informações.",
 };
 
 export default function RootLayout({

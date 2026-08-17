@@ -180,8 +180,8 @@ export default function UploadPage() {
         </h1>
         <p className="mt-3 text-sm sm:text-base text-gray-600 max-w-2xl mx-auto">
           {isCte
-            ? "Envie uma foto ou scan nítido do seu CT-e (DACTE). Nossa IA extrai automaticamente remetente, destinatário, componentes do frete e impostos para você revisar."
-            : "Envie uma foto ou scan nítido da sua NF-e (DANFE). Nossa IA extrai automaticamente emissor, destinatário, itens e valores para você revisar."}
+            ? "Envie uma foto ou scan nítido do seu CT-e (DACTE). Nosso sistema extrai automaticamente remetente, destinatário, componentes do frete e impostos para você revisar."
+            : "Envie uma foto ou scan nítido da sua NF-e (DANFE). Nosso sistema extrai automaticamente emissor, destinatário, itens e valores para você revisar."}
         </p>
       </div>
 
@@ -214,8 +214,8 @@ export default function UploadPage() {
           </button>
         </div>
         <p className="mt-2 text-center text-xs text-gray-500">
-          Escolha o tipo de documento antes de enviar a imagem — isso ajuda a
-          IA a extrair os campos corretos.
+          Escolha o tipo de documento antes de enviar a imagem — isso ajuda o
+          sistema a extrair os campos corretos.
         </p>
       </div>
 
@@ -353,7 +353,7 @@ export default function UploadPage() {
                 <div className="flex items-center justify-between text-xs mb-2">
                   <span className="font-medium text-gray-700">
                     {step === "processing"
-                      ? "Extraindo dados com IA..."
+                      ? "Extraindo dados com OCR..."
                       : "Preparando imagem..."}
                   </span>
                   <span className="text-primary-600 font-semibold tabular-nums">
@@ -457,7 +457,7 @@ export default function UploadPage() {
                 Escolha o tipo de documento ({isCte ? "CT-e / DACTE" : "NF-e / DANFE"})
               </li>
               <li>Envie a foto do documento</li>
-              <li>IA lê e organiza os dados automaticamente</li>
+              <li>Sistema lê e organiza os dados automaticamente</li>
               <li>Revise, ajuste e confirme as informações</li>
             </ol>
           </div>

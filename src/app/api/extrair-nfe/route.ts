@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { createWorker, PSM, type Worker } from "tesseract.js";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 const OCR_TIMEOUT_MS = 42_000;
 const MAX_BASE64_CHARS = 7_000_000;
