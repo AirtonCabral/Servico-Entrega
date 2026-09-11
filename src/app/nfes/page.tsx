@@ -192,9 +192,11 @@ export default function NfeListPage() {
 
   const onEdit = (entry: NfeHistoryEntry) => {
     if (typeof window !== "undefined") {
+      const tipo = entry.tipo || getTipo(entry);
       sessionStorage.setItem(
         "nfe:data",
         JSON.stringify({
+          tipo: tipo,
           data: entry.data,
           image: entry.image || "",
           extractedAt: entry.validatedAt,

@@ -39,7 +39,7 @@ export default function EntregaPage() {
     loadSelectedNfes();
   }, []);
 
-  const loadSelectedNfes = () => {
+  const loadSelectedNfes = async () => {
     try {
       // Try localStorage first (new approach)
       const deliveryItemsRaw = localStorage.getItem("delivery:items");
@@ -57,7 +57,7 @@ export default function EntregaPage() {
         }));
 
         setDeliveryPoints(points);
-        calculateOptimizedRoute(points);
+        await calculateOptimizedRoute(points);
         setLoading(false);
         return;
       }
@@ -82,7 +82,7 @@ export default function EntregaPage() {
       }));
 
       setDeliveryPoints(points);
-      calculateOptimizedRoute(points);
+      await calculateOptimizedRoute(points);
     } catch (error) {
       console.error("Erro ao carregar NF-es selecionadas:", error);
     } finally {
@@ -90,8 +90,8 @@ export default function EntregaPage() {
     }
   };
 
-  const calculateOptimizedRoute = (points: DeliveryPoint[]) => {
-    const route = optimizeRoute(points);
+  const calculateOptimizedRoute = async (points: DeliveryPoint[]) => {
+    const route = await optimizeRoute(points);
     const stats = calculateRouteStats(route);
     
     // Adicionar ordem sequencial aos pontos
@@ -159,7 +159,7 @@ export default function EntregaPage() {
           </div>
           <div className="flex flex-wrap gap-2 self-start">
             <button
-              onClick={() => optimizeRoute(deliveryPoints)}
+              onClick={() => calculateOptimizedRoute(deliveryPoints)}
               className="btn-secondary"
             >
               <svg

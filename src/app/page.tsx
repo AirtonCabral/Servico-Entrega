@@ -5,6 +5,7 @@ import { useState, useRef, useCallback, DragEvent, ChangeEvent } from "react";
 import { useRouter } from "next/navigation";
 import type { NotaFiscalData, CteData, TipoDocumento } from "@/lib/types";
 import { useOcr } from "@/app/hooks/useOcr";
+import QRCodeScanner from "@/components/QRCodeScanner";
 
 type Step = "idle" | "uploading" | "processing" | "error";
 
@@ -17,6 +18,7 @@ export default function UploadPage() {
   const [errorMessage, setErrorMessage] = useState<string>("");
   const [isDragOver, setIsDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
   
   // Usar o hook de OCR client-side
   const { processarImagem, isLoading, progress, statusMessage } = useOcr();
@@ -171,13 +173,21 @@ export default function UploadPage() {
     setStep("idle");
     setErrorMessage("");
     if (fileInputRef.current) fileInputRef.current.value = "";
+    if (cameraInputRef.current) cameraInputRef.current.value = "";
+  };
+
+  const handleCameraClick = () => {
+    cameraInputRef.current?.click();
   };
 
   const isCte = tipoDocumento === "cte";
 
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8 sm:py-12">
-      <div className="mb-8 sm:mb-10 text-center">
+      <div>
+        <QRCodeScanner/>
+      </div>
+      {/* <div className="mb-8 sm:mb-10 text-center">
         <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 tracking-tight">
           Envie a foto do documento fiscal
         </h1>
@@ -189,10 +199,8 @@ export default function UploadPage() {
         <p className="mt-2 text-xs text-green-600">
           🔒 Processamento local - sua imagem nunca é enviada para o servidor
         </p>
-      </div>
-
-      {/* Seletor de tipo de documento */}
-      <div className="max-w-md mx-auto mb-8 sm:mb-10">
+      </div> */}
+      {/* <div className="max-w-md mx-auto mb-8 sm:mb-10">
         <div className="inline-flex w-full rounded-xl border border-gray-200 bg-gray-50 p-1 gap-1">
           <button
             type="button"
@@ -222,9 +230,8 @@ export default function UploadPage() {
         <p className="mt-2 text-center text-xs text-gray-500">
           Escolha o tipo de documento antes de enviar a imagem
         </p>
-      </div>
-
-      <div className="grid lg:grid-cols-2 gap-6 sm:gap-8">
+      </div> */}
+      {/* <div className="grid lg:grid-cols-2 gap-6 sm:gap-8">
         <div className="space-y-5">
           <div
             onDrop={handleDrop}
@@ -241,6 +248,14 @@ export default function UploadPage() {
               ref={fileInputRef}
               type="file"
               accept="image/*"
+              className="hidden"
+              onChange={handleInputChange}
+            />
+            <input
+              ref={cameraInputRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
               className="hidden"
               onChange={handleInputChange}
             />
@@ -275,6 +290,28 @@ export default function UploadPage() {
               </p>
             </div>
           </div>
+
+          <button
+            type="button"
+            onClick={handleCameraClick}
+            disabled={step === "processing" || isLoading}
+            className="w-full btn-primary flex items-center justify-center gap-2"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={2}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="w-5 h-5"
+            >
+              <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+              <circle cx="12" cy="13" r="4" />
+            </svg>
+            Abrir câmera
+          </button>
 
           <div className="card">
             <h3 className="font-semibold text-gray-900 mb-3">
@@ -351,8 +388,6 @@ export default function UploadPage() {
                 </div>
               )}
             </div>
-
-            {/* Progresso do OCR client-side */}
             {(step === "processing" || isLoading) && (
               <div className="mt-5">
                 <div className="flex items-center justify-between text-xs mb-2">
@@ -467,7 +502,7 @@ export default function UploadPage() {
             </ol>
           </div>
         </div>
-      </div>
+      </div> */}
     </div>
   );
 }

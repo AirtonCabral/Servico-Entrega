@@ -6,6 +6,9 @@
  *   const dados = extrairDadosDANFE(textoOCR);
  *   console.log(dados);
  */
+
+import type { NotaFiscalData } from "../types";
+
  
 // Padrões de formato reutilizados para "ancorar" valores independente
 // de onde o rótulo caiu no texto (o OCR real costuma embaralhar a posição
@@ -17,9 +20,51 @@ const RE_DATA = /\d{2}\/\d{2}\/\d{4}/;
 const RE_HORA = /\d{2}:\d{2}:\d{2}/;
 const RE_FONE = /\(?\d{2}\)?\s?\d{4,5}-?\d{4}/;
 const RE_UF = /\b[A-Z]{2}\b/; // sem grupo de captura próprio (evita desalinhar grupos ao compor)
+
+// Função para normalizar valores monetários brasileiros
+// Converte formatos como "706,86" ou "1.234,56" para o formato padrão
+// e também corrige casos onde o OCR confunde ponto com vírgula
+function normalizarValorMonetario(valor: string): string {
+  if (!valor) return "";
+  
+  // Remove espaços extras
+  valor = valor.trim();
+  
+  // Se já tem vírgula como separador decimal (formato brasileiro correto)
+  if (valor.includes(',') && !valor.includes('.')) {
+    return valor; // Já está no formato correto
+  }
+  
+  // Se tem ponto como separador decimal (formato incorreto/OCR error)
+  // e não tem vírgula, converte para formato brasileiro
+  if (valor.includes('.') && !valor.includes(',')) {
+    // Verifica se parece formato US (ex: 706.86)
+    const partes = valor.split('.');
+    if (partes.length === 2 && partes[1].length <= 2) {
+      // Provavelmente é decimal no formato US, converter para BR
+      return valor.replace('.', ',');
+    }
+  }
+  
+  // Se tem ambos ponto e vírgula
+  if (valor.includes('.') && valor.includes(',')) {
+    // Verifica se está no formato brasileiro correto (1.234,56)
+    const partesVirgula = valor.split(',');
+    if (partesVirgula.length === 2 && partesVirgula[1].length <= 2) {
+      return valor; // Já está correto
+    }
+    
+    // Se não, pode estar invertido (70.686,00 deveria ser 706,86)
+    // Neste caso, remove os pontos e mantém a vírgula
+    const semPontos = valor.replace(/\./g, '');
+    return semPontos;
+  }
+  
+  // Se não tem separadores, retorna como está
+  return valor;
+}
  
 export function extrairDadosDANFE(texto: string) {
-  debugger
   // Normaliza espaços múltiplos e quebras de linha para facilitar os regex
   const t = texto.replace(/\r/g, "").replace(/[ \t]+/g, " ");
   const linhas = t.split("\n").map((l) => l.trim()).filter(Boolean);
@@ -142,7 +187,7 @@ export function extrairDadosDANFE(texto: string) {
     naturezaOperacao,
     chaveAcesso,
     protocoloAutorizacao,
-    valorTotal: pick(/VALOR TOTAL:?\s*R\$\s*([\d.,]+)/i),
+    valorTotal: normalizarValorMonetario(pick(/VALOR TOTAL:?\s*R\$\s*([\d.,]+)/i)),
  
     emitente: {
       nome: (() => {
@@ -216,9 +261,9 @@ function extrairProdutos(t: string) {
       cst: m[4],
       cfop: m[5],
       unidade: m[6],
-      quantidade: m[7],
-      valorUnitario: m[8],
-      valorTotal: m[9],
+      quantidade: normalizarValorMonetario(m[7]),
+      valorUnitario: normalizarValorMonetario(m[8]),
+      valorTotal: normalizarValorMonetario(m[9]),
     });
   }
  
@@ -229,7 +274,7 @@ function extrairProdutos(t: string) {
 function extrairValoresTotais(t: string) {
   const pick = (regex: RegExp) => {
     const m = t.match(regex);
-    return m ? m[1].trim() : "";
+    return m ? normalizarValorMonetario(m[1].trim()) : "";
   };
  
   return {
@@ -244,3 +289,135 @@ function extrairValoresTotais(t: string) {
     valorTotalTributos: pick(/VALOR APROX(?:IMADO)? DOS TRIBUTOS\s*\n?\s*([\d.,]+)/i),
   };
 }
+export const QRCodeScanner = () => {
+  const router = useRouter();
+  // Estados do React
+  const [scanResult, setScanResult] = useState<string | null>(null); // Guarda o número lido
+  const [loadingData, setLoadingData] = useState(false); // Controle de carregamento
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const scannerRef = useRef<Html5QrcodeScanner | null>(null);
+
+  // Função chamada quando a câmera/foto lê algo com sucesso
+  const onScanSuccess = useCallback(async (decodedText: string, decodedResult: any) => {
+    // 1. Para de escanear depois que achar o primeiro código
+    if (scannerRef.current) {
+      scannerRef.current.clear();
+    }
+    
+    // 2. Exibe o número lido na tela imediatamente
+    setScanResult(decodedText);
+    setLoadingData(true);
+    setErrorMsg(null);
+
+    // 3. Chama a API DadosApiExterna com a chave de acesso
+    console.log("Chave lida:", decodedText);
+
+    try {
+      // const response = await fetch(`/api/DadosApiExterna?chave=${decodedText}`);
+      const response = await dadosApiExterna.consultarNfe(decodedText);
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Erro ao buscar dados da API');
+      }
+
+      const apiData = await response.json() as NotaFiscalData;
+
+      // Salvar os dados no sessionStorage para uso na página de validação
+      sessionStorage.setItem('nfe:data', JSON.stringify({
+        tipo: 'nfe',
+        data: apiData,
+        image: '', // Sem imagem pois veio do QR code
+        extractedAt: Date.now()
+      }));
+
+      setLoadingData(false);
+
+      // Redirecionar para a página de validação
+      router.push('/validacao');
+
+    } catch (err) {
+      setLoadingData(false);
+      setErrorMsg(err instanceof Error ? err.message : 'Erro ao buscar dados da API');
+    }
+
+  }, [router]);
+
+  // Função para lidar com erros
+  const onScanFailure = useCallback((error: any) => {
+    // Ignoramos erros constantes de leitura para não poluir
+    console.log('Erro no callback');
+  }, []);
+
+  // Função para ativar o scanner quando o usuário clicar
+  const startScanner = useCallback(() => {
+    setScanResult(null);
+    setErrorMsg(null);
+
+    const scanner = new Html5QrcodeScanner('reader',
+      { fps: 10, qrbox: { width: 250, height: 250 } },
+      false
+    );
+
+    scanner.render(onScanSuccess, onScanFailure);
+
+    // Salva no ref para poder parar o scanner depois
+    scannerRef.current = scanner;
+  }, [onScanSuccess, onScanFailure]);
+
+  return (
+    <div style={styles.container}>
+      <style>{`
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+      `}</style>
+      <h2>📷 Leitor de QR Code / Código de Barras</h2>
+
+      {!scanResult && (
+        <div style={styles.controls}>
+          <button style={styles.button} onClick={startScanner}>
+            Abrir Câmera / Enviar Foto
+          </button>
+          <div id="reader" style={styles.reader}></div>
+        </div>
+      )}
+
+      {/* Área onde os dados serão mostrados */}
+      {scanResult && (
+        <div style={styles.resultBox}>
+          <h3>✅ Leitura concluída</h3>
+          <p><strong>Chave de Acesso:</strong> <br /> {scanResult}</p>
+
+          {loadingData ? (
+            <div style={styles.loading}>
+              <div style={styles.spinner}></div>
+              🔍 Buscando dados da NF-e na API...
+            </div>
+          ) : errorMsg ? (
+            <div style={styles.errorBox}>
+              <h4 style={styles.errorTitle}>❌ Erro na consulta</h4>
+              <p style={styles.errorMsg}>{errorMsg}</p>
+              <button
+                style={styles.resetBtn}
+                onClick={() => {
+                  setScanResult(null);
+                  setErrorMsg(null);
+                  if (scannerRef.current) scannerRef.current.clear();
+                } }
+              >
+                🔄 Tentar Novamente
+              </button>
+            </div>
+          ) : (
+            <div style={styles.dataBox}>
+              <h4 style={styles.dataTitle}>📦 Dados carregados com sucesso!</h4>
+              <p>Redirecionando para a página de validação...</p>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};

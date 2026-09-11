@@ -35,6 +35,49 @@ const RE_FONE = /\(\d{2}\)\s?\d{4,5}-?\d{4}/;
 // pode estar errado porque o OCR comeu a vírgula decimal.
 const RE_VALOR = /\d{1,3}(?:\.\d{3})*,\d{2}|\d+\.\d{2}/;
 
+// Função para normalizar valores monetários brasileiros
+// Converte formatos como "706,86" ou "1.234,56" para o formato padrão
+// e também corrige casos onde o OCR confunde ponto com vírgula
+function normalizarValorMonetario(valor: string): string {
+  if (!valor) return "";
+  
+  // Remove espaços extras
+  valor = valor.trim();
+  
+  // Se já tem vírgula como separador decimal (formato brasileiro correto)
+  if (valor.includes(',') && !valor.includes('.')) {
+    return valor; // Já está no formato correto
+  }
+  
+  // Se tem ponto como separador decimal (formato incorreto/OCR error)
+  // e não tem vírgula, converte para formato brasileiro
+  if (valor.includes('.') && !valor.includes(',')) {
+    // Verifica se parece formato US (ex: 706.86)
+    const partes = valor.split('.');
+    if (partes.length === 2 && partes[1].length <= 2) {
+      // Provavelmente é decimal no formato US, converter para BR
+      return valor.replace('.', ',');
+    }
+  }
+  
+  // Se tem ambos ponto e vírgula
+  if (valor.includes('.') && valor.includes(',')) {
+    // Verifica se está no formato brasileiro correto (1.234,56)
+    const partesVirgula = valor.split(',');
+    if (partesVirgula.length === 2 && partesVirgula[1].length <= 2) {
+      return valor; // Já está correto
+    }
+    
+    // Se não, pode estar invertido (70.686,00 deveria ser 706,86)
+    // Neste caso, remove os pontos e mantém a vírgula
+    const semPontos = valor.replace(/\./g, '');
+    return semPontos;
+  }
+  
+  // Se não tem separadores, retorna como está
+  return valor;
+}
+
 export function extrairDadosCTe(texto: string): CteData {
   const t = texto.replace(/\r/g, "").replace(/[ \t]+/g, " ");
   const linhas = t.split("\n").map((l) => l.trim()).filter(Boolean);
@@ -311,7 +354,7 @@ export function extrairDadosCTe(texto: string): CteData {
     if (m) {
       produtoPredominante = m[1];
       outrasCaracteristicasCarga = m[2];
-      valorTotalCarga = m[3];
+      valorTotalCarga = normalizarValorMonetario(m[3]);
     }
   }
 
@@ -336,17 +379,13 @@ export function extrairDadosCTe(texto: string): CteData {
     }
   }
   if (!valorTotalCarga) {
-    valorTotalCarga = valoresNaLinha(/VALOR TOTAL DA CARGA/i);
+    valorTotalCarga = normalizarValorMonetario(valoresNaLinha(/VALOR TOTAL DA CARGA/i));
   }
 
   // ---------- Componentes do valor da prestação ----------
-  // Normaliza "0.00" (o Tesseract às vezes lê o separador decimal como
-  // ponto em vez de vírgula) para o padrão BR "0,00"
-  const normalizarDecimal = (valor: string) =>
-    /^\d+\.\d{2}$/.test(valor) ? valor.replace(".", ",") : valor;
-
+  // Usa a função de normalização mais robusta para valores monetários
   const v = (label: RegExp) =>
-    normalizarDecimal(
+    normalizarValorMonetario(
       pick(new RegExp(`${label.source}\\s*\\n?\\s*(${RE_VALOR.source})`, "i")),
     );
 
@@ -368,8 +407,9 @@ export function extrairDadosCTe(texto: string): CteData {
   // Valor total do serviço e valor a receber costumam vir "pendurados" no
   // fim das linhas da tabela de componentes, não logo após o rótulo.
   const valorTotalServico =
-    valoresNaLinha(/SEC\s*\/?\s*CAT/i) || v(/VALOR TOTAL DO SERVI[ÇC]O/i);
-  const valorAReceber = valoresNaLinha(/\bDCE\b/i) || v(/VALOR A RECEBER/i);
+    normalizarValorMonetario(valoresNaLinha(/SEC\s*\/?\s*CAT/i)) || v(/VALOR TOTAL DO SERVI[ÇC]O/i);
+  const valorAReceber =
+    normalizarValorMonetario(valoresNaLinha(/\bDCE\b/i)) || v(/VALOR A RECEBER/i);
 
   // ---------- Impostos ----------
   const idxImposto = idxLinha(/SITUA[ÇC][ÃA]O TRIBUT[ÁA]RIA/i);
@@ -388,9 +428,9 @@ export function extrairDadosCTe(texto: string): CteData {
       // senão o OCR provavelmente comeu a vírgula e o número está errado
       const baseCandidata = m[3];
       const valorCandidato = m[5].replace(/[^\d.,]/g, "");
-      baseCalculoICMS = RE_VALOR.test(baseCandidata) ? baseCandidata : "";
+      baseCalculoICMS = RE_VALOR.test(baseCandidata) ? normalizarValorMonetario(baseCandidata) : "";
       aliqICMS = m[4];
-      valorICMS = RE_VALOR.test(valorCandidato) ? valorCandidato : "";
+      valorICMS = RE_VALOR.test(valorCandidato) ? normalizarValorMonetario(valorCandidato) : "";
     }
   }
   const percReducaoBaseCalculo = pick(

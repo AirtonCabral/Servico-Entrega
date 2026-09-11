@@ -1,5 +1,6 @@
-// Biblioteca simples para cálculo de rotas de entrega
-// Pode ser expandida com integração real de APIs de mapas (Google Maps, Mapbox, etc.)
+// Biblioteca para cálculo de rotas de entrega
+// Integra com OSRM (Open Source Routing Machine) para rotas reais pelas ruas
+import { getRoute, getDistanceInKm, getDurationInMinutes, RoutePoint } from './osrmRouting';
 
 export interface DeliveryPoint {
   id: string;
@@ -28,11 +29,27 @@ export interface OptimizedRoute {
 }
 
 /**
- * Simula o cálculo de distância entre dois pontos
- * Em produção, isso usaria uma API real de geocoding e routing
+ * Calcula distância real entre dois pontos usando OSRM
+ * Se os pontos tiverem coordenadas, usa OSRM. Caso contrário, usa simulação.
  */
-function calculateDistance(point1: DeliveryPoint, point2: DeliveryPoint): number {
-  // Simulação: baseada na diferença de bairros e endereços
+async function calculateDistance(point1: DeliveryPoint, point2: DeliveryPoint): Promise<number> {
+  // Se ambos os pontos tiverem coordenadas, usa OSRM
+  if (point1.lat && point1.lng && point2.lat && point2.lng) {
+    try {
+      const route = await getRoute(
+        { lat: point1.lat, lng: point1.lng },
+        { lat: point2.lat, lng: point2.lng }
+      );
+      
+      if (route) {
+        return getDistanceInKm(route);
+      }
+    } catch (error) {
+      console.warn('OSRM routing failed, using fallback:', error);
+    }
+  }
+  
+  // Fallback: simulação baseada na diferença de bairros e endereços
   if (point1.bairro === point2.bairro) {
     return 1 + Math.random() * 2; // 1-3 km se mesmo bairro
   }
@@ -53,8 +70,9 @@ function calculateDuration(distance: number): number {
 /**
  * Algoritmo simples de otimização de rota (Nearest Neighbor)
  * Encontra a rota mais eficiente visitando sempre o ponto mais próximo
+ * Agora usa OSRM para cálculo real de distância quando coordenadas estão disponíveis
  */
-export function optimizeRoute(points: DeliveryPoint[]): OptimizedRoute {
+export async function optimizeRoute(points: DeliveryPoint[]): Promise<OptimizedRoute> {
   if (points.length === 0) {
     return {
       points: [],
@@ -87,13 +105,13 @@ export function optimizeRoute(points: DeliveryPoint[]): OptimizedRoute {
     let nearestIndex = 0;
     let nearestDistance = Infinity;
 
-    unvisited.forEach((point, index) => {
-      const distance = calculateDistance(currentPoint, point);
+    for (let i = 0; i < unvisited.length; i++) {
+      const distance = await calculateDistance(currentPoint, unvisited[i]);
       if (distance < nearestDistance) {
         nearestDistance = distance;
-        nearestIndex = index;
+        nearestIndex = i;
       }
-    });
+    }
 
     const nextPoint = unvisited[nearestIndex];
     const duration = calculateDuration(nearestDistance);
