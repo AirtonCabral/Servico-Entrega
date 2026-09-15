@@ -81,7 +81,7 @@ export default function TesteLoadingPage() {
         const mockData = mockNotasFiscais[i % mockNotasFiscais.length];
         
         // Salvar diretamente no histórico com os dados mock
-        saveNfeToHistory("nfe", mockData, images[i].url);
+        await saveNfeToHistory("nfe", mockData, images[i].url);
         successCount++;
         
         console.log(`Imagem ${i + 1} processada: ${mockData.destinatario.nome}`);

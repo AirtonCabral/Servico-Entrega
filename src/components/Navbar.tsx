@@ -1,16 +1,37 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import { createClient } from "@/lib/supabase/client";
+import type { User } from "@supabase/supabase-js";
 
 export default function Navbar() {
   const pathname = usePathname();
+  const router = useRouter();
+  const [user, setUser] = useState<User | null>(null);
+
+  useEffect(() => {
+    const supabase = createClient();
+    supabase.auth.getUser().then(({ data }) => setUser(data.user));
+  }, []);
+
+  async function handleLogout() {
+    const supabase = createClient();
+    await supabase.auth.signOut();
+    router.push("/login");
+    router.refresh();
+  }
 
   const navItems = [
+    { href: "/dashboard", label: "Dashboard", icon: "📊" },
     { href: "/", label: "Upload", icon: "📤" },
     { href: "/nfes", label: "NF-e's", icon: "📄" },
     { href: "/entrega", label: "Entregas", icon: "🚚" },
   ];
+
+  const displayName =
+    (user?.user_metadata?.nome as string) || user?.email?.split("@")[0] || "";
 
   return (
     <nav className="bg-white border-b border-gray-200 sticky top-0 z-50">
@@ -44,6 +65,20 @@ export default function Navbar() {
               );
             })}
           </div>
+
+          {user && (
+            <div className="flex items-center gap-3">
+              <span className="text-sm text-gray-600 hidden md:inline">
+                👤 {displayName}
+              </span>
+              <button
+                onClick={handleLogout}
+                className="text-sm font-medium text-gray-500 hover:text-red-600 transition"
+              >
+                Sair
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </nav>

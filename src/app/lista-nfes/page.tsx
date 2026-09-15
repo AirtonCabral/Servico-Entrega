@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { NfeHistoryEntry } from "@/lib/storage";
-import { getNfeHistory } from "@/lib/storage";
+import { getNfeHistory, updateNfeStatus } from "@/lib/storage";
 
 export default function ListaNfesPage() {
   const router = useRouter();
@@ -13,10 +13,15 @@ export default function ListaNfesPage() {
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    const history = getNfeHistory(); // pode ler de localStorage aqui
-    setItens(history);
-    setLoaded(true);
+    let ativo = true;
+    getNfeHistory({ excludeStatuses: ["entregue"] }).then((history) => {
+      if (!ativo) return;
+      setItens(history);
+      setLoaded(true);
+    });
+    return () => {
+      ativo = false;
+    };
   }, []);
 
   const toggleSelection = (id: string) => {
@@ -37,20 +42,17 @@ export default function ListaNfesPage() {
     }
   };
 
-  const handleEnviarParaEntrega = () => {
+  const handleEnviarParaEntrega = async () => {
     if (selectedIds.size === 0) {
       alert("Selecione pelo menos uma NF-e para envio.");
       return;
     }
 
-    const selectedItens = itens.filter(item => selectedIds.has(item.id));
-    
-    // Salvar as NF-es selecionadas no sessionStorage para a página de entrega
-    sessionStorage.setItem(
-      "entrega:selected",
-      JSON.stringify(selectedItens)
+    // Marca as NF-es selecionadas como "em rota" no banco
+    await Promise.all(
+      [...selectedIds].map((id) => updateNfeStatus(id, "em_rota")),
     );
-    
+
     router.push("/entrega");
   };
 

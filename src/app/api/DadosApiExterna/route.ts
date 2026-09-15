@@ -1,8 +1,6 @@
 // src/services/nfeService.ts
 
 import { NextRequest, NextResponse } from 'next/server';
-import type { NotaFiscalData, PessoaNF, ProdutoNF, ValoresTotaisNF } from '@/lib/types';
-import { env } from 'process';
 
 export type NfeApiError = {
   error?: string;
@@ -17,8 +15,7 @@ export async function consultarNfe(accessKey: string) {
     );
   }
 
-  // const apiKey = process.env.NFE_API_KEY;
-  const apiKey = "TaDhtFBL3k8TN76NKq0CAkUETgrw2lDGAVZsnoUhlW0m6C3CtW8gwu95dlZ79NAmaGx";
+  const apiKey = process.env.NFE_API_KEY;
 
   if (!apiKey) {
     throw new Error("Chave de API não configurada.");
@@ -47,183 +44,68 @@ export async function consultarNfe(accessKey: string) {
     );
   }
   
-  return data;
+  // Converte todos os valores monetários do payload para reais no formato
+  // brasileiro ("1.234,56") antes de devolver, para que qualquer consumidor
+  // (QR code, validação, histórico) receba os valores já em BRL.
+  return normalizeValuesToBRL(data);
 }
 
 // ============================================================
-// Tipagem do payload real retornado pela API externa (NFE.io / SERPRO)
-// Só os campos usados no mapeamento abaixo.
+// Helpers de normalização de valores monetários (BRL)
 // ============================================================
 
-interface ApiAddress {
-  phone?: string;
-  state?: string;
-  city?: { code?: string; name?: string };
-  district?: string;
-  street?: string;
-  number?: string;
-  postalCode?: string;
-  country?: string;
-}
-
-interface ApiParty {
-  federalTaxNumber?: number | string;
-  name?: string;
-  address?: ApiAddress;
-  stateTaxNumber?: string;
-}
-
-interface ApiIcmsTotals {
-  baseTax?: number;
-  icmsAmount?: number;
-  productAmount?: number;
-  freightAmount?: number;
-  insuranceAmount?: number;
-  discountAmount?: number;
-  ipiAmount?: number;
-  othersAmount?: number;
-  invoiceAmount?: number;
-  federalTaxesAmount?: number;
-}
-
-interface ApiItemIcms {
-  cst?: string;
-}
-
-interface ApiItemTax {
-  icms?: ApiItemIcms;
-}
-
-interface ApiItem {
-  code?: string;
-  description?: string;
-  ncm?: string;
-  cfop?: number | string;
-  unit?: string;
-  quantity?: number;
-  unitAmount?: number;
-  totalAmount?: number;
-  tax?: ApiItemTax;
-}
-
-interface ApiProtocol {
-  accessKey?: string;
-  protocolNumber?: string;
-}
-
-interface NfeApiResponse {
-  number?: number | string;
-  serie?: number | string;
-  issuedOn?: string;
-  operationOn?: string;
-  operationNature?: string;
-  issuer?: ApiParty;
-  buyer?: ApiParty;
-  totals?: { icms?: ApiIcmsTotals };
-  items?: ApiItem[];
-  protocol?: ApiProtocol;
-}
-
-// ============================================================
-// Mapper — API real (inglês) -> NotaFiscalData (modelo interno)
-// ============================================================
-
-function mapParty(party?: ApiParty): PessoaNF {
-  const addr = party?.address;
-  const endereco = [addr?.street, addr?.number].filter(Boolean).join(', ');
-  const taxNumber = party?.federalTaxNumber != null ? String(party.federalTaxNumber) : '';
-
-  return {
-    nome: party?.name || '',
-    cnpj: taxNumber,
-    cpfCnpj: taxNumber,
-    inscricaoEstadual: party?.stateTaxNumber || '',
-    endereco: endereco || '',
-    bairro: addr?.district || '',
-    cep: addr?.postalCode || '',
-    municipio: addr?.city?.name || '',
-    uf: addr?.state || '',
-    telefone: addr?.phone || '',
-  };
-}
-
-function mapApiToNotaFiscalData(apiData: NfeApiResponse): NotaFiscalData {
-  const icmsTotals = apiData.totals?.icms;
-
-  const produtos: ProdutoNF[] = (apiData.items || []).map((item) => ({
-    codigo: item.code || '',
-    descricao: item.description || '',
-    ncm: item.ncm || '',
-    cst: item.tax?.icms?.cst || '',
-    cfop: item.cfop != null ? String(item.cfop) : '',
-    unidade: item.unit || 'UN',
-    quantidade: formatDecimal(item.quantity) || '0,000',
-    valorUnitario: formatCurrency(item.unitAmount) || '0,00',
-    valorTotal: formatCurrency(item.totalAmount) || '0,00',
-  }));
-
-  const valoresTotais: ValoresTotaisNF = {
-    baseCalculoICMS: formatCurrency(icmsTotals?.baseTax) || '',
-    valorICMS: formatCurrency(icmsTotals?.icmsAmount) || '',
-    valorProdutos: formatCurrency(icmsTotals?.productAmount) || '',
-    valorFrete: formatCurrency(icmsTotals?.freightAmount) || '',
-    valorSeguro: formatCurrency(icmsTotals?.insuranceAmount) || '',
-    valorDesconto: formatCurrency(icmsTotals?.discountAmount) || '',
-    valorIPI: formatCurrency(icmsTotals?.ipiAmount) || '',
-    // othersAmount cobre "outras despesas acessórias" do DANFE
-    valorOutrasDespesas: formatCurrency(icmsTotals?.othersAmount) || '',
-    // federalTaxesAmount é o total aproximado de tributos federais (Lei 12.741).
-    // Troque por pisAmount + cofinsAmount + ipiAmount somados se preferir outro critério.
-    valorTotalTributos: formatCurrency(icmsTotals?.federalTaxesAmount) || '',
-  };
-
-  return {
-    numero: apiData.number != null ? String(apiData.number) : '',
-    serie: apiData.serie != null ? String(apiData.serie) : '',
-    dataEmissao: formatDate(apiData.issuedOn) || '',
-    // A API não retorna data/hora de saída separadas; operationOn é o mais próximo disponível.
-    dataSaidaEntrada: formatDate(apiData.operationOn) || '',
-    horaSaida: '',
-    naturezaOperacao: apiData.operationNature || '',
-    chaveAcesso: apiData.protocol?.accessKey || '',
-    protocoloAutorizacao: apiData.protocol?.protocolNumber || '',
-    valorTotal: formatCurrency(icmsTotals?.invoiceAmount) || '',
-    emitente: mapParty(apiData.issuer),
-    destinatario: mapParty(apiData.buyer),
-    produtos,
-    valoresTotais,
-  };
-}
-
-function formatDate(dateStr?: string): string {
-  if (!dateStr) return '';
-  // Se já estiver no formato DD/MM/AAAA, retorna como está
-  if (/^\d{2}\/\d{2}\/\d{4}$/.test(dateStr)) return dateStr;
-
-  // Se estiver no formato ISO (YYYY-MM-DDTHH:mm:ss...), converte para DD/MM/AAAA
-  if (/^\d{4}-\d{2}-\d{2}/.test(dateStr)) {
-    const [year, month, day] = dateStr.slice(0, 10).split('-');
-    return `${day}/${month}/${year}`;
+// Converte um valor para número, aceitando tanto o formato brasileiro
+// ("1.234,56" ou "1234,56") quanto o americano/numérico ("1234.56").
+function parseNumber(value: unknown): number {
+  if (value === null || value === undefined) return NaN;
+  const s = String(value).trim();
+  if (!s) return NaN;
+  // Formato brasileiro: vírgula é o separador decimal e ponto é milhar
+  if (s.includes(',')) {
+    return parseFloat(s.replace(/\./g, '').replace(',', '.'));
   }
-
-  return dateStr;
+  // Formato americano/numérico: ponto é o separador decimal
+  return parseFloat(s);
 }
 
 function formatCurrency(value: unknown): string {
   if (value === null || value === undefined) return '0,00';
-  const num = parseFloat(String(value).replace(',', '.'));
+  const num = parseNumber(value);
   if (isNaN(num)) return '0,00';
   return num.toFixed(2).replace('.', ',');
 }
 
-function formatDecimal(value: unknown): string {
-  if (value === null || value === undefined) return '0,000';
-  const num = parseFloat(String(value).replace(',', '.'));
-  if (isNaN(num)) return '0,000';
-  return num.toFixed(3).replace('.', ',');
+// Campos monetários do payload da API (nfe.io / SERPRO):
+// chaves que terminam em "Amount" (unitAmount, totalAmount, invoiceAmount,
+// productAmount, paymentDetail.amount etc.) ou a "baseTax" são valores em reais.
+function isMoneyKey(key: string): boolean {
+  const k = key.toLowerCase();
+  return k.endsWith('amount') || k === 'basetax' || k === 'totaltax';
+}
+
+// Percorre o payload recursivamente e converte todos os valores monetários
+// para o formato brasileiro de reais ("1.234,56"), preservando a estrutura.
+function normalizeValuesToBRL(node: unknown): unknown {
+  if (Array.isArray(node)) {
+    return node.map(normalizeValuesToBRL);
+  }
+  if (node && typeof node === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(node as Record<string, unknown>)) {
+      if (isMoneyKey(key)) {
+        out[key] = formatCurrency(value);
+      } else {
+        out[key] = normalizeValuesToBRL(value);
+      }
+    }
+    return out;
+  }
+  return node;
 }
 
 // Endpoint API para consulta de NF-e
+// Retorna o payload CRU da NFe.io (com valores em BRL), que é o formato
+// esperado pela página de validação (converterParaUnificado).
 export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
@@ -237,9 +119,8 @@ export async function GET(request: NextRequest) {
     }
 
     const apiData = await consultarNfe(chave);
-    const notaFiscalData = mapApiToNotaFiscalData(apiData as NfeApiResponse);
 
-    return NextResponse.json(notaFiscalData);
+    return NextResponse.json(apiData);
   } catch (error) {
     console.error('Erro ao consultar NF-e:', error);
     return NextResponse.json(

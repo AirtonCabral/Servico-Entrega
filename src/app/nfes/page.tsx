@@ -3,13 +3,31 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import type { NfeHistoryEntry } from "@/lib/storage";
+import type { NfeHistoryEntry, NfeStatus } from "@/lib/storage";
 import type { NotaFiscalData, CteData } from "@/lib/types";
 import {
   clearNfeHistory,
   deleteNfeFromHistory,
   getNfeHistory,
+  migrateLegacyHistory,
+  updateNfeStatus,
 } from "@/lib/storage";
+
+const STATUS_LABEL: Record<NfeStatus, string> = {
+  pendente: "Pendente",
+  em_rota: "Em rota",
+  entregue: "Entregue",
+  cancelado: "Cancelado",
+  devolvido: "Devolvido",
+};
+
+const STATUS_COLOR: Record<NfeStatus, string> = {
+  pendente: "bg-slate-100 text-slate-700",
+  em_rota: "bg-amber-100 text-amber-700",
+  entregue: "bg-emerald-100 text-emerald-700",
+  cancelado: "bg-red-100 text-red-700",
+  devolvido: "bg-purple-100 text-purple-700",
+};
 
 function formatDate(ts: number): string {
   try {
@@ -107,19 +125,20 @@ export default function NfeListPage() {
   const [selectedNfes, setSelectedNfes] = useState<Set<string>>(new Set());
   const [loaded, setLoaded] = useState(false);
 
-  // Carrega itens apenas na primeira montagem
+  // Carrega itens do banco (migrando o histórico antigo do localStorage, se houver)
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    const history = getNfeHistory();
-    setItens(history);
-    setLoaded(true);
+    let ativo = true;
+    (async () => {
+      await migrateLegacyHistory();
+      const history = await getNfeHistory({ excludeStatuses: ["entregue"] });
+      if (!ativo) return;
+      setItens(history);
+      setLoaded(true);
+    })();
+    return () => {
+      ativo = false;
+    };
   }, []);
-
-  // Sempre que itens mudar, atualiza o localStorage
-  useEffect(() => {
-    if (typeof window === "undefined" || !loaded) return;
-    localStorage.setItem("nfe:data", JSON.stringify(itens));
-  }, [itens, loaded]);
 
   const filtrados = useMemo(() => {
     const q = filtro.trim().toLowerCase();
@@ -171,21 +190,21 @@ export default function NfeListPage() {
     ? itens.find((i) => i.id === selected) || null
     : null;
 
-  const onDelete = (id: string) => {
+  const onDelete = async (id: string) => {
     if (!confirm("Deseja realmente excluir esta NF-e do histórico?")) return;
-    deleteNfeFromHistory(id);
-    setItens(getNfeHistory());
+    await deleteNfeFromHistory(id);
+    setItens(await getNfeHistory({ excludeStatuses: ["entregue"] }));
     if (selected === id) setSelected(null);
   };
 
-  const onClear = () => {
+  const onClear = async () => {
     if (
       !confirm(
         "Deseja APAGAR TODAS as NF-e do histórico? Essa ação não pode ser desfeita.",
       )
     )
       return;
-    clearNfeHistory();
+    await clearNfeHistory();
     setItens([]);
     setSelected(null);
   };
@@ -228,50 +247,29 @@ export default function NfeListPage() {
     }
   };
 
-  const onSendToDelivery = () => {
+  const onSendToDelivery = async () => {
     if (selectedNfes.size === 0) {
       alert("Selecione pelo menos uma NF-e para enviar para entregas.");
       return;
     }
 
-    const selectedEntries = itens.filter((e) => selectedNfes.has(e.id));
+    try {
+      // Marca as NF-es selecionadas como "em rota" no banco
+      await Promise.all(
+        [...selectedNfes].map((id) => updateNfeStatus(id, "em_rota")),
+      );
 
-    if (typeof window !== "undefined") {
-      try {
-        const existingDelivery = JSON.parse(
-          localStorage.getItem("delivery:items") || "[]"
-        );
+      setItens(await getNfeHistory({ excludeStatuses: ["entregue"] }));
+      setSelectedNfes(new Set());
+      setSelected((prev) => (prev && selectedNfes.has(prev) ? null : prev));
 
-        const newDeliveryItems = selectedEntries.map((entry) => ({
-          id: `delivery-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-          nfeId: entry.id,
-          data: entry.data,
-          image: entry.image,
-          addedAt: Date.now(),
-          status: "pending",
-        }));
+      alert(`${selectedNfes.size} NF-e(s) enviada(s) para entregas com sucesso!`);
 
-        const updatedDelivery = [...existingDelivery, ...newDeliveryItems];
-        localStorage.setItem("delivery:items", JSON.stringify(updatedDelivery));
-
-        // Remove os selecionados da lista principal
-        const updatedItens = itens.filter((e) => {
-          !selectedNfes.has(e.id)
-          deleteNfeFromHistory(e.id);
-        });
-        setItens(updatedItens);
-        // O useEffect acima já atualiza localStorage "nfe:data"
-        setSelectedNfes(new Set());
-        setSelected((prev) => (prev && selectedNfes.has(prev) ? null : prev));
-
-        alert(`${selectedNfes.size} NF-e(s) enviada(s) para entregas com sucesso!`);
-
-        // Navega para a página de entregas
-        router.push("/entrega");
-      } catch (err) {
-        console.error("Erro ao enviar para entregas:", err);
-        alert("Erro ao enviar NF-es para entregas. Tente novamente.");
-      }
+      // Navega para a página de entregas
+      router.push("/entrega");
+    } catch (err) {
+      console.error("Erro ao enviar para entregas:", err);
+      alert("Erro ao enviar NF-es para entregas. Tente novamente.");
     }
   };
 
@@ -284,8 +282,8 @@ export default function NfeListPage() {
               NF-e&apos;s Validadas
             </h1>
             <p className="mt-2 text-sm text-gray-600 max-w-2xl">
-              Histórico das notas fiscais validadas e armazenadas localmente
-              (localStorage). Clique em uma linha para ver os detalhes.
+              Histórico das notas fiscais validadas, armazenadas no banco de
+              dados. Clique em uma linha para ver os detalhes.
             </p>
           </div>
           <div className="flex flex-wrap gap-2 self-start">
@@ -434,6 +432,7 @@ export default function NfeListPage() {
                     <th className="py-3 pr-4 font-medium hidden md:table-cell">
                       Itens
                     </th>
+                    <th className="py-3 pr-4 font-medium">Status</th>
                     <th className="py-3 pr-4 font-medium text-right">
                       Valor total
                     </th>
@@ -507,6 +506,15 @@ export default function NfeListPage() {
                         <td className="py-3.5 pr-4 align-top hidden md:table-cell">
                           <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-700 tabular-nums">
                             {getItensCount(e)} item(ns)
+                          </span>
+                        </td>
+                        <td className="py-3.5 pr-4 align-top">
+                          <span
+                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium tabular-nums ${
+                              STATUS_COLOR[e.status ?? "pendente"]
+                            }`}
+                          >
+                            {STATUS_LABEL[e.status ?? "pendente"]}
                           </span>
                         </td>
                         <td className="py-3.5 pr-4 align-top text-right">

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import type { NfeHistoryEntry } from "@/lib/storage";
+import { getNfesByStatus, updateNfeStatus } from "@/lib/storage";
 import { optimizeRoute, calculateRouteStats, type DeliveryPoint } from "@/lib/routing";
 import dynamic from "next/dynamic";
 
@@ -25,10 +25,11 @@ export default function EntregaPage() {
   const [optimizedRoute, setOptimizedRoute] = useState<DeliveryPoint[]>([]);
   const [routeStats, setRouteStats] = useState<any>(null);
 
-  const clearDeliveryItems = () => {
+  const clearDeliveryItems = async () => {
     if (confirm("Deseja limpar todos os itens de entrega?")) {
-      localStorage.removeItem("delivery:items");
-      sessionStorage.removeItem("entrega:selected");
+      // Devolve as NF-es em rota para o status "pendente"
+      const emRota = await getNfesByStatus("em_rota");
+      await Promise.all(emRota.map((n) => updateNfeStatus(n.id, "pendente")));
       setDeliveryPoints([]);
       setOptimizedRoute([]);
       setRouteStats(null);
@@ -41,52 +42,56 @@ export default function EntregaPage() {
 
   const loadSelectedNfes = async () => {
     try {
-      // Try localStorage first (new approach)
-      const deliveryItemsRaw = localStorage.getItem("delivery:items");
-      if (deliveryItemsRaw) {
-        const deliveryItems = JSON.parse(deliveryItemsRaw);
-        
-        const points: DeliveryPoint[] = deliveryItems.map((item: any) => ({
-          id: item.id,
-          destinatario: item.data.destinatario.nome,
-          endereco: item.data.destinatario.endereco,
-          bairro: item.data.destinatario.bairro || "Sem bairro",
-          municipio: item.data.destinatario.municipio,
-          uf: item.data.destinatario.uf,
-          cep: item.data.destinatario.cep,
-        }));
+      // NF-es com status "em_rota" no banco
+      const nfes = await getNfesByStatus("em_rota");
 
-        setDeliveryPoints(points);
-        await calculateOptimizedRoute(points);
-        setLoading(false);
-        return;
-      }
-
-      // Fallback to sessionStorage (old approach)
-      const raw = sessionStorage.getItem("entrega:selected");
-      if (!raw) {
-        setLoading(false);
-        return;
-      }
-
-      const selectedNfes: NfeHistoryEntry[] = JSON.parse(raw);
-      
-      const points: DeliveryPoint[] = selectedNfes.map((item) => ({
+      const points: DeliveryPoint[] = nfes.map((item) => ({
         id: item.id,
-        destinatario: item.data.destinatario.nome,
-        endereco: item.data.destinatario.endereco,
-        bairro: "bairro" in item.data.destinatario ? item.data.destinatario.bairro || "Sem bairro" : "Sem bairro",
-        municipio: item.data.destinatario.municipio,
-        uf: item.data.destinatario.uf,
-        cep: item.data.destinatario.cep,
+        destinatario: item.data.destinatario?.nome || "Sem nome",
+        endereco: item.data.destinatario?.endereco || "",
+        bairro:
+          "bairro" in item.data.destinatario
+            ? item.data.destinatario.bairro || "Sem bairro"
+            : "Sem bairro",
+        municipio: item.data.destinatario?.municipio,
+        uf: item.data.destinatario?.uf,
+        cep: item.data.destinatario?.cep,
       }));
 
       setDeliveryPoints(points);
-      await calculateOptimizedRoute(points);
+      if (points.length > 0) {
+        await calculateOptimizedRoute(points);
+      }
     } catch (error) {
-      console.error("Erro ao carregar NF-es selecionadas:", error);
+      console.error("Erro ao carregar NF-es em rota:", error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const concluirEntrega = async (id: string) => {
+    await updateNfeStatus(id, "entregue");
+    const restantes = deliveryPoints.filter((p) => p.id !== id);
+    setDeliveryPoints(restantes);
+    if (restantes.length > 0) {
+      await calculateOptimizedRoute(restantes);
+    } else {
+      setOptimizedRoute([]);
+      setRouteStats(null);
+    }
+  };
+
+  const cancelarEntrega = async (id: string) => {
+    if (!confirm("Cancelar esta entrega? A NF-e voltará para o status pendente.")) return;
+    // Volta para "pendente" — a NF-e reaparece na lista de /nfes
+    await updateNfeStatus(id, "pendente");
+    const restantes = deliveryPoints.filter((p) => p.id !== id);
+    setDeliveryPoints(restantes);
+    if (restantes.length > 0) {
+      await calculateOptimizedRoute(restantes);
+    } else {
+      setOptimizedRoute([]);
+      setRouteStats(null);
     }
   };
 
@@ -221,6 +226,45 @@ export default function EntregaPage() {
                     <p className="text-xs text-gray-500">
                       {point.bairro} · {point.municipio} - {point.uf}
                     </p>
+                  </div>
+                  <div className="flex flex-col gap-1.5 flex-shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => concluirEntrega(point.id)}
+                      title="Marcar como entregue"
+                      className="inline-flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-emerald-600 text-white hover:bg-emerald-700 transition"
+                    >
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth={2.5}
+                        className="w-3.5 h-3.5"
+                      >
+                        <path d="M20 6 9 17l-5-5" />
+                      </svg>
+                      Concluir
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => cancelarEntrega(point.id)}
+                      title="Cancelar entrega (volta para pendente)"
+                      className="inline-flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 transition"
+                    >
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth={2.5}
+                        className="w-3.5 h-3.5"
+                      >
+                        <path d="M18 6 6 18" />
+                        <path d="m6 6 12 12" />
+                      </svg>
+                      Cancelar
+                    </button>
                   </div>
                 </div>
               ))}

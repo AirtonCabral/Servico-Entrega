@@ -138,10 +138,19 @@ function pick(base: string | undefined, incoming: string | undefined): string {
   return incoming && incoming.trim().length > 0 ? incoming : base ?? "";
 }
 
-function mergePessoa<T extends Record<string, string>>(base: T, incoming: T): T {
+function mergePessoa<T extends object>(base: T, incoming: T): T {
   const merged = { ...base };
   (Object.keys(incoming) as (keyof T)[]).forEach((key) => {
-    merged[key] = pick(base[key], incoming[key]) as T[keyof T];
+    const b = base[key];
+    const i = incoming[key];
+    if (typeof i === "string") {
+      merged[key] = pick(b as string, i) as T[keyof T];
+    } else if (i && typeof i === "object" && b && typeof b === "object") {
+      // Objetos aninhados (ex.: endereco) são mesclados recursivamente
+      merged[key] = mergePessoa(b as object, i as object) as T[keyof T];
+    } else {
+      merged[key] = i;
+    }
   });
   return merged;
 }
@@ -165,10 +174,10 @@ function mergeDocumentoData(
     destinatario: mergePessoa(base.destinatario, incoming.destinatario),
     produtos: incoming.produtos && incoming.produtos.length > 0 ? incoming.produtos : base.produtos,
     valoresTotais: base.valoresTotais && incoming.valoresTotais
-      ? mergePessoa(base.valoresTotais as unknown as Record<string, string>, incoming.valoresTotais as unknown as Record<string, string>) as unknown as typeof base.valoresTotais
+      ? mergePessoa(base.valoresTotais, incoming.valoresTotais)
       : (incoming.valoresTotais || base.valoresTotais),
-    transporte: incoming.transporte ? mergePessoa(base.transporte as unknown as Record<string, string>, incoming.transporte as unknown as Record<string, string>) as unknown as typeof base.transporte : base.transporte,
-    pagamento: incoming.pagamento ? mergePessoa(base.pagamento as unknown as Record<string, string>, incoming.pagamento as unknown as Record<string, string>) as unknown as typeof base.pagamento : base.pagamento,
+    transporte: incoming.transporte ? mergePessoa(base.transporte, incoming.transporte) : base.transporte,
+    pagamento: incoming.pagamento ? mergePessoa(base.pagamento, incoming.pagamento) : base.pagamento,
   };
 }
 
@@ -290,6 +299,73 @@ function SectionHeader({
   );
 }
 
+// Converte o modelo interno NotaFiscalData (vindo do OCR) para o shape cru
+// da API NFe.io, para que o mapeamento unificado funcione com ambos os formatos.
+function toRawShape(nfe: any): any {
+  return {
+    number: nfe?.numero,
+    serie: nfe?.serie,
+    issuedOn: nfe?.dataEmissao,
+    operationOn: nfe?.dataSaidaEntrada,
+    operationNature: nfe?.naturezaOperacao,
+    protocol: {
+      accessKey: nfe?.chaveAcesso,
+      protocolNumber: nfe?.protocoloAutorizacao,
+    },
+    totals: {
+      icms: {
+        baseTax: nfe?.valoresTotais?.baseCalculoICMS,
+        icmsAmount: nfe?.valoresTotais?.valorICMS,
+        productAmount: nfe?.valoresTotais?.valorProdutos,
+        freightAmount: nfe?.valoresTotais?.valorFrete,
+        insuranceAmount: nfe?.valoresTotais?.valorSeguro,
+        discountAmount: nfe?.valoresTotais?.valorDesconto,
+        ipiAmount: nfe?.valoresTotais?.valorIPI,
+        othersAmount: nfe?.valoresTotais?.valorOutrasDespesas,
+        federalTaxesAmount: nfe?.valoresTotais?.valorTotalTributos,
+        invoiceAmount: nfe?.valorTotal,
+      },
+    },
+    issuer: {
+      name: nfe?.emitente?.nome,
+      federalTaxNumber: nfe?.emitente?.cnpj || nfe?.emitente?.cpfCnpj,
+      stateTaxNumber: nfe?.emitente?.inscricaoEstadual,
+      address: {
+        street: nfe?.emitente?.endereco,
+        district: nfe?.emitente?.bairro,
+        postalCode: nfe?.emitente?.cep,
+        city: { name: nfe?.emitente?.municipio },
+        state: nfe?.emitente?.uf,
+        phone: nfe?.emitente?.telefone,
+      },
+    },
+    buyer: {
+      name: nfe?.destinatario?.nome,
+      federalTaxNumber: nfe?.destinatario?.cnpj || nfe?.destinatario?.cpfCnpj,
+      stateTaxNumber: nfe?.destinatario?.inscricaoEstadual,
+      address: {
+        street: nfe?.destinatario?.endereco,
+        district: nfe?.destinatario?.bairro,
+        postalCode: nfe?.destinatario?.cep,
+        city: { name: nfe?.destinatario?.municipio },
+        state: nfe?.destinatario?.uf,
+        phone: nfe?.destinatario?.telefone,
+      },
+    },
+    items: (nfe?.produtos || []).map((p: any) => ({
+      code: p?.codigo,
+      description: p?.descricao,
+      ncm: p?.ncm,
+      cfop: p?.cfop,
+      unit: p?.unidade,
+      quantity: p?.quantidade,
+      unitAmount: p?.valorUnitario,
+      totalAmount: p?.valorTotal,
+      tax: { icms: { cst: p?.cst } },
+    })),
+  };
+}
+
 export default function ValidacaoPage() {
   const router = useRouter();
   const [stored, setStored] = useState<Stored | null>(null);
@@ -305,11 +381,22 @@ export default function ValidacaoPage() {
   const converterParaUnificado = (dados: any, tipo: TipoDocumento): DocumentoUnificado => {
     if (tipo === "nfe") {
       // Extrair dados do JSON no formato que você forneceu
-      const nfe = dados;
+      const dadosOriginais = dados;
+      let nfe = dados;
+
+      // Detecta o formato recebido:
+      // - payload cru da API NFe.io (issuer/totals/items) — vindo do QR code
+      // - modelo interno NotaFiscalData (emitente/valoresTotais/produtos) — vindo do OCR
+      const isRawApi = !!(nfe && (nfe.issuer || nfe.totals?.icms));
+      if (!isRawApi) {
+        nfe = toRawShape(nfe);
+      }
       
       // Formatar data
       const formatarData = (dataStr: string) => {
         if (!dataStr) return "";
+        // Já está em DD/MM/AAAA (modelo interno) — não reconverter
+        if (/^\d{2}\/\d{2}\/\d{4}$/.test(dataStr)) return dataStr;
         try {
           const date = new Date(dataStr);
           return date.toLocaleDateString('pt-BR');
@@ -321,11 +408,15 @@ export default function ValidacaoPage() {
       // Formatar hora
       const formatarHora = (dataStr: string) => {
         if (!dataStr) return "";
+        // Já está em HH:MM:SS — não reconverter
+        if (/^\d{2}:\d{2}:\d{2}$/.test(dataStr)) return dataStr;
+        // Só converte se a string realmente contiver hora (ISO datetime)
+        if (!/\d{2}:\d{2}/.test(dataStr)) return "";
         try {
           const date = new Date(dataStr);
           return date.toLocaleTimeString('pt-BR');
         } catch {
-          return dataStr;
+          return "";
         }
       };
 
@@ -336,7 +427,7 @@ export default function ValidacaoPage() {
         tipo: "nfe",
         dataEmissao: formatarData(nfe.issuedOn),
         dataOperacao: formatarData(nfe.operationOn),
-        horaOperacao: formatarHora(nfe.operationOn),
+        horaOperacao: formatarHora(nfe.operationOn) || dadosOriginais?.horaSaida || "",
         naturezaOperacao: nfe.operationNature || "",
         chaveAcesso: nfe.protocol?.accessKey || "",
         protocoloAutorizacao: nfe.protocol?.protocolNumber || "",
@@ -645,11 +736,15 @@ export default function ValidacaoPage() {
         throw new Error(errorData.error || 'Erro ao buscar dados da API');
       }
 
-      const apiData = await response.json() as DocumentoUnificado;
+      const apiData = await response.json();
+
+      // A API devolve o payload cru da NFe.io — converte para o formato
+      // unificado antes de mesclar com os dados já extraídos.
+      const unificado = converterParaUnificado(apiData, "nfe");
 
       setData((prev) => {
         const base = prev || data;
-        return mergeDocumentoData(base, apiData);
+        return mergeDocumentoData(base, unificado);
       });
       setApiError(null);
     } catch (error) {
@@ -660,7 +755,7 @@ export default function ValidacaoPage() {
     }
   };
 
-  const onSubmit = (e: React.FormEvent) => {
+  const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!data || !stored) return;
     try {
@@ -669,7 +764,7 @@ export default function ValidacaoPage() {
         ? converterParaNfe(data) 
         : converterParaCte(data);
       
-      saveNfeToHistory(stored.tipo, dadosOriginais, stored.image);
+      await saveNfeToHistory(stored.tipo, dadosOriginais, stored.image);
       sessionStorage.setItem(
         "nfe:validated",
         JSON.stringify({
@@ -705,6 +800,7 @@ export default function ValidacaoPage() {
       emitente: {
         nome: d.emitente.nome,
         cnpj: d.emitente.cnpjCpf,
+        cpfCnpj: d.emitente.cnpjCpf,
         inscricaoEstadual: d.emitente.inscricaoEstadual,
         endereco: `${d.emitente.endereco.logradouro}, ${d.emitente.endereco.numero} ${d.emitente.endereco.complemento}`,
         bairro: d.emitente.endereco.bairro,
@@ -715,6 +811,7 @@ export default function ValidacaoPage() {
       },
       destinatario: {
         nome: d.destinatario.nome,
+        cnpj: d.destinatario.cnpjCpf,
         cpfCnpj: d.destinatario.cnpjCpf,
         inscricaoEstadual: d.destinatario.inscricaoEstadual,
         endereco: `${d.destinatario.endereco.logradouro}, ${d.destinatario.endereco.numero} ${d.destinatario.endereco.complemento}`,
