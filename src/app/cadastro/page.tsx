@@ -20,7 +20,6 @@ function formatarCelular(valor: string): string {
 
 export default function CadastroPage() {
   const router = useRouter();
-  const supabase = createClient();
 
   const [nome, setNome] = useState("");
   const [celular, setCelular] = useState("");
@@ -55,6 +54,7 @@ export default function CadastroPage() {
 
     setLoading(true);
 
+    const supabase = createClient();
     const { data, error } = await supabase.auth.signUp({
       email,
       password,

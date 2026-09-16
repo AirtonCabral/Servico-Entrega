@@ -7,7 +7,6 @@ import { createClient } from "@/lib/supabase/client";
 
 export default function RedefinirSenhaPage() {
   const router = useRouter();
-  const supabase = createClient();
 
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -32,6 +31,7 @@ export default function RedefinirSenhaPage() {
 
     // O link do e-mail já carrega a sessão de recuperação na URL;
     // o createBrowserClient a reconhece automaticamente.
+    const supabase = createClient();
     const { error } = await supabase.auth.updateUser({ password });
 
     setLoading(false);
