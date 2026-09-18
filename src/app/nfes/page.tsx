@@ -11,6 +11,8 @@ import {
   getNfeHistory,
   migrateLegacyHistory,
   updateNfeStatus,
+  type DatePeriod,
+  NFE_STATUSES,
 } from "@/lib/storage";
 
 const STATUS_LABEL: Record<NfeStatus, string> = {
@@ -121,6 +123,8 @@ export default function NfeListPage() {
   const router = useRouter();
   const [itens, setItens] = useState<NfeHistoryEntry[]>([]);
   const [filtro, setFiltro] = useState("");
+  const [statusFiltro, setStatusFiltro] = useState<NfeStatus[]>([]);
+  const [periodoFiltro, setPeriodoFiltro] = useState<DatePeriod | "">("");
   const [selected, setSelected] = useState<string | null>(null);
   const [selectedNfes, setSelectedNfes] = useState<Set<string>>(new Set());
   const [loaded, setLoaded] = useState(false);
@@ -130,7 +134,13 @@ export default function NfeListPage() {
     let ativo = true;
     (async () => {
       await migrateLegacyHistory();
-      const history = await getNfeHistory({ excludeStatuses: ["entregue"] });
+      const history = await getNfeHistory({
+        excludeStatuses: ["entregue"],
+        filter: {
+          statuses: statusFiltro.length ? statusFiltro : undefined,
+          datePeriod: periodoFiltro || undefined,
+        },
+      });
       if (!ativo) return;
       setItens(history);
       setLoaded(true);
@@ -138,7 +148,7 @@ export default function NfeListPage() {
     return () => {
       ativo = false;
     };
-  }, []);
+  }, [statusFiltro, periodoFiltro]);
 
   const filtrados = useMemo(() => {
     const q = filtro.trim().toLowerCase();
@@ -193,7 +203,15 @@ export default function NfeListPage() {
   const onDelete = async (id: string) => {
     if (!confirm("Deseja realmente excluir esta NF-e do histórico?")) return;
     await deleteNfeFromHistory(id);
-    setItens(await getNfeHistory({ excludeStatuses: ["entregue"] }));
+    setItens(
+      await getNfeHistory({
+        excludeStatuses: ["entregue"],
+        filter: {
+          statuses: statusFiltro.length ? statusFiltro : undefined,
+          datePeriod: periodoFiltro || undefined,
+        },
+      }),
+    );
     if (selected === id) setSelected(null);
   };
 
@@ -259,7 +277,15 @@ export default function NfeListPage() {
         [...selectedNfes].map((id) => updateNfeStatus(id, "em_rota")),
       );
 
-      setItens(await getNfeHistory({ excludeStatuses: ["entregue"] }));
+      setItens(
+        await getNfeHistory({
+          excludeStatuses: ["entregue"],
+          filter: {
+            statuses: statusFiltro.length ? statusFiltro : undefined,
+            datePeriod: periodoFiltro || undefined,
+          },
+        }),
+      );
       setSelectedNfes(new Set());
       setSelected((prev) => (prev && selectedNfes.has(prev) ? null : prev));
 
@@ -407,6 +433,92 @@ export default function NfeListPage() {
             </div>
 
             <div className="overflow-x-auto -mx-6 sm:-mx-6 px-6 sm:px-6">
+              {/* Filtros de status e período */}
+              <div className="flex flex-col sm:flex-row gap-4 mb-4">
+                {/* Filtro por status */}
+                <div className="flex-1">
+                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">
+                    Status
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setStatusFiltro([])}
+                      className={`text-xs font-medium px-3 py-1.5 rounded-full border transition-colors ${
+                        statusFiltro.length === 0
+                          ? "bg-gray-900 text-white border-gray-900"
+                          : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"
+                      }`}
+                    >
+                      Todos
+                    </button>
+                    {NFE_STATUSES.map((s) => (
+                      <button
+                        key={s}
+                        type="button"
+                        onClick={() => {
+                          setStatusFiltro((prev) =>
+                            prev.includes(s)
+                              ? prev.filter((st) => st !== s)
+                              : [...prev, s],
+                          );
+                        }}
+                        className={`text-xs font-medium px-3 py-1.5 rounded-full border transition-colors ${
+                          statusFiltro.includes(s)
+                            ? "bg-gray-900 text-white border-gray-900"
+                            : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"
+                        }`}
+                      >
+                        {STATUS_LABEL[s]}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {/* Filtro por período */}
+                <div className="flex-1">
+                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">
+                    Período
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setPeriodoFiltro("")}
+                      className={`text-xs font-medium px-3 py-1.5 rounded-full border transition-colors ${
+                        periodoFiltro === ""
+                          ? "bg-gray-900 text-white border-gray-900"
+                          : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"
+                      }`}
+                    >
+                      Todo período
+                    </button>
+                    {[
+                      { value: "15d", label: "15 dias" },
+                      { value: "1m", label: "1 mês" },
+                      { value: "3m", label: "3 meses" },
+                      { value: "6m", label: "6 meses" },
+                      { value: "1y", label: "1 ano" },
+                    ].map(({ value, label }) => (
+                      <button
+                        key={value}
+                        type="button"
+                        onClick={() =>
+                          setPeriodoFiltro(
+                            periodoFiltro === value ? "" : (value as DatePeriod),
+                          )
+                        }
+                        className={`text-xs font-medium px-3 py-1.5 rounded-full border transition-colors ${
+                          periodoFiltro === value
+                            ? "bg-gray-900 text-white border-gray-900"
+                            : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
               <table className="min-w-full text-sm">
                 <thead>
                   <tr className="text-left text-xs font-semibold uppercase tracking-wide text-gray-500 border-b border-gray-200">

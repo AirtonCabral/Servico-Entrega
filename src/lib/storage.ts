@@ -77,8 +77,16 @@ function extrairResumo(tipo: TipoDocumento, data: NotaFiscalData | CteData) {
   };
 }
 
+export type DatePeriod = "15d" | "1m" | "3m" | "6m" | "1y";
+
+export interface NfeHistoryFilter {
+  statuses?: NfeStatus[];
+  datePeriod?: DatePeriod;
+}
+
 export async function getNfeHistory(options?: {
   excludeStatuses?: NfeStatus[];
+  filter?: NfeHistoryFilter;
 }): Promise<NfeHistoryEntry[]> {
   const supabase = createClient();
   let query = supabase
@@ -92,6 +100,32 @@ export async function getNfeHistory(options?: {
       "in",
       `(${options.excludeStatuses.join(",")})`,
     );
+  }
+
+  // Filtro por status
+  if (options?.filter?.statuses?.length) {
+    query = query.in(
+      "status",
+      options.filter.statuses,
+    );
+  }
+
+  // Filtro por período de data
+  if (options?.filter?.datePeriod) {
+    const now = new Date();
+    let days: number;
+    switch (options.filter.datePeriod) {
+      case "15d": days = 15; break;
+      case "1m": days = 30; break;
+      case "3m": days = 90; break;
+      case "6m": days = 180; break;
+      case "1y": days = 365; break;
+      default: days = 0;
+    }
+    if (days > 0) {
+      const since = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
+      query = query.gte("validated_at", since.toISOString());
+    }
   }
 
   const { data, error } = await query;
