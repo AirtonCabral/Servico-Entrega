@@ -785,7 +785,7 @@ export default function ValidacaoPage() {
       }, 900);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      console.error("Falha ao persistir documento:", msg);
+      console.log("Falha ao persistir documento:", msg);
       alert("Erro ao salvar nota fiscal:\n\n" + msg + "\n\nVerifique se você está logado.");
     }
   };

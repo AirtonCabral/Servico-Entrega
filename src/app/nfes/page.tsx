@@ -94,29 +94,29 @@ function getNatureza(entry: NfeHistoryEntry): string {
 function getEmitenteNome(entry: NfeHistoryEntry): string {
   const tipo = getTipo(entry);
   return tipo === "nfe" 
-    ? (entry.data as NotaFiscalData).emitente.nome || ""
-    : (entry.data as CteData).remetente.nome || "";
+    ? (entry.data as NotaFiscalData).emitente?.nome || ""
+    : (entry.data as CteData).remetente?.nome || "";
 }
 
 function getEmitenteDoc(entry: NfeHistoryEntry): string {
   const tipo = getTipo(entry);
   return tipo === "nfe" 
-    ? (entry.data as NotaFiscalData).emitente.cnpj
-    : (entry.data as CteData).remetente.cnpjCpf;
+    ? (entry.data as NotaFiscalData).emitente?.cnpj || ""
+    : (entry.data as CteData).remetente?.cnpjCpf || "";
 }
 
 function getDestinatarioNome(entry: NfeHistoryEntry): string {
   const tipo = getTipo(entry);
   return tipo === "nfe" 
-    ? (entry.data as NotaFiscalData).destinatario.nome
-    : (entry.data as CteData).destinatario.nome;
+    ? (entry.data as NotaFiscalData).destinatario?.nome || ""
+    : (entry.data as CteData).destinatario?.nome || "";
 }
 
 function getDestinatarioDoc(entry: NfeHistoryEntry): string {
   const tipo = getTipo(entry);
   return tipo === "nfe" 
-    ? (entry.data as NotaFiscalData).destinatario.cpfCnpj
-    : (entry.data as CteData).destinatario.cnpjCpf;
+    ? (entry.data as NotaFiscalData).destinatario?.cpfCnpj || ""
+    : (entry.data as CteData).destinatario?.cnpjCpf || "";
 }
 
 export default function NfeListPage() {
@@ -162,18 +162,18 @@ export default function NfeListPage() {
         d.serie,
         d.chaveAcesso,
         ...(tipo === "nfe" ? [
-          (d as NotaFiscalData).emitente.nome,
-          (d as NotaFiscalData).emitente.cnpj,
-          (d as NotaFiscalData).destinatario.nome,
-          (d as NotaFiscalData).destinatario.cpfCnpj,
+          (d as NotaFiscalData).emitente?.nome || "",
+          (d as NotaFiscalData).emitente?.cnpj || "",
+          (d as NotaFiscalData).destinatario?.nome || "",
+          (d as NotaFiscalData).destinatario?.cpfCnpj || "",
           (d as NotaFiscalData).naturezaOperacao,
           (d as NotaFiscalData).dataEmissao,
           ...((d as NotaFiscalData).produtos?.map((p) => `${p.codigo} ${p.descricao}`) || []),
         ] : [
-          (d as CteData).remetente.nome,
-          (d as CteData).remetente.cnpjCpf,
-          (d as CteData).destinatario.nome,
-          (d as CteData).destinatario.cnpjCpf,
+          (d as CteData).remetente?.nome || "",
+          (d as CteData).remetente?.cnpjCpf || "",
+          (d as CteData).destinatario?.nome || "",
+          (d as CteData).destinatario?.cnpjCpf || "",
           (d as CteData).tipoCte,
           (d as CteData).dataHoraEmissao,
         ]),

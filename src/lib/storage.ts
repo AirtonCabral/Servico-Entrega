@@ -196,7 +196,7 @@ export async function saveNfeToHistory(
     .single();
 
   if (error) {
-    console.error("Erro ao salvar NF-e:", error.message);
+    console.log("Erro ao salvar NF-e:", error.message);
     throw error;
   }
 
