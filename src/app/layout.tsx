@@ -2,7 +2,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import Navbar from "@/components/Navbar";
-import { PreloadTesseract } from "@/components/PreloadTesseract";
 
 export const metadata: Metadata = {
   title: "Validação de Nota Fiscal",
@@ -32,7 +31,6 @@ export default function RootLayout({
             </div>
           </footer>
         </div>
-        <PreloadTesseract />
       </body>
     </html>
   );

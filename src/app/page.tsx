@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import type { NotaFiscalData, CteData, TipoDocumento } from "@/lib/types";
 import { useOcr } from "@/app/hooks/useOcr";
 import QRCodeScanner from "@/components/QRCodeScanner";
+import { PreloadTesseract } from "@/components/PreloadTesseract";
 
 type Step = "idle" | "uploading" | "processing" | "error";
 
@@ -184,6 +185,7 @@ export default function UploadPage() {
 
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8 sm:py-12">
+      <PreloadTesseract />
       <div>
         <QRCodeScanner/>
       </div>
