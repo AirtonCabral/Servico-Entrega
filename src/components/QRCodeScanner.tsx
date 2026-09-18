@@ -65,12 +65,24 @@ const extractKeyFromText = (text: string): string | null => {
   return keys[0];
 };
 
+// Erro de autenticação: sessão ausente/expirada (middleware responde 401
+// nas rotas /api/*). O scanner redireciona para o login em vez de travar.
+class AuthRequiredError extends Error {
+  constructor() {
+    super('Sua sessão expirou. Faça login novamente.');
+    this.name = 'AuthRequiredError';
+  }
+}
+
 // Consulta a NF-e pela API route do servidor (a chave da NFe.io fica só no
 // servidor, nunca no bundle do navegador).
 async function consultarNfeViaApi(accessKey: string): Promise<NotaFiscalData> {
   const res = await fetch(
     `/api/DadosApiExterna?chave=${encodeURIComponent(accessKey)}`,
   );
+  if (res.status === 401) {
+    throw new AuthRequiredError();
+  }
   if (!res.ok) {
     const body = await res.json().catch(() => null);
     throw new Error(
@@ -141,6 +153,11 @@ const QRCodeScanner = () => {
 
     } catch (err) {
       setLoadingData(false);
+      if (err instanceof AuthRequiredError) {
+        // Sessão expirada/ausente: manda para o login (volta para cá depois)
+        router.push('/login?next=/');
+        return;
+      }
       setErrorMsg(err instanceof Error ? err.message : 'Erro ao buscar dados da API');
     }
 
