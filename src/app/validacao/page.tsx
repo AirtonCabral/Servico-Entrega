@@ -764,7 +764,10 @@ export default function ValidacaoPage() {
         ? converterParaNfe(data) 
         : converterParaCte(data);
       
-      await saveNfeToHistory(stored.tipo, dadosOriginais, stored.image);
+      const result = await saveNfeToHistory(stored.tipo, dadosOriginais, stored.image);
+      if (!result) {
+        throw new Error("saveNfeToHistory retornou undefined — verifique se você está logado");
+      }
       sessionStorage.setItem(
         "nfe:validated",
         JSON.stringify({
@@ -776,13 +779,15 @@ export default function ValidacaoPage() {
         }),
       );
       sessionStorage.removeItem("nfe:data");
-    } catch (err) {
-      console.warn("Falha ao persistir documento:", err);
+      setSaved(true);
+      setTimeout(() => {
+        router.push("/nfes");
+      }, 900);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error("Falha ao persistir documento:", msg);
+      alert("Erro ao salvar nota fiscal:\n\n" + msg + "\n\nVerifique se você está logado.");
     }
-    setSaved(true);
-    setTimeout(() => {
-      router.push("/nfes");
-    }, 900);
   };
 
   // Funções para converter de volta (simplificadas)
