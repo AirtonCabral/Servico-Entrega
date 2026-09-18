@@ -164,6 +164,15 @@ export async function saveNfeToHistory(
   const chave = (d.chaveAcesso || "").replace(/\s+/g, "");
   const resumo = extrairResumo(tipo, data);
 
+  // Adiciona status a cada produto no payload
+  const dataWithStatus = { ...data } as NotaFiscalData & CteData;
+  if (tipo === "nfe" && (data as NotaFiscalData).produtos?.length) {
+    (dataWithStatus as NotaFiscalData).produtos = (data as NotaFiscalData).produtos!.map((p) => ({
+      ...p,
+      status: "pendente",
+    }));
+  }
+
   const { data: row, error } = await supabase
     .from("notas_fiscais")
     .upsert(
@@ -177,7 +186,7 @@ export async function saveNfeToHistory(
         destinatario_nome: resumo.destinatarioNome,
         destinatario_cnpj: resumo.destinatarioCnpj,
         valor_total: resumo.valorTotal,
-        payload: data,
+        payload: dataWithStatus,
         image: image || null,
         validated_at: new Date().toISOString(),
       },
@@ -205,6 +214,7 @@ export async function saveNfeToHistory(
       quantidade: p.quantidade || null,
       valor_unitario: p.valorUnitario || null,
       valor_total: p.valorTotal || null,
+      status: row.status || "pendente",
     }));
     const { error: errItens } = await supabase.from("produtos").insert(itens);
     if (errItens) {
@@ -259,6 +269,14 @@ export async function updateNfeStatus(
     .eq("id", id);
   if (error) {
     console.error("Erro ao atualizar status:", error.message);
+  }
+  // Propaga o status para todos os produtos da NF-e
+  const { error: errProd } = await supabase
+    .from("produtos")
+    .update({ status })
+    .eq("nota_fiscal_id", id);
+  if (errProd) {
+    console.error("Erro ao atualizar status dos produtos:", errProd.message);
   }
 }
 

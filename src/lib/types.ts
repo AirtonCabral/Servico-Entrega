@@ -23,6 +23,7 @@ export interface ProdutoNF {
   quantidade: string;
   valorUnitario: string;
   valorTotal: string;
+  status?: string;
 }
 
 export interface ValoresTotaisNF {
